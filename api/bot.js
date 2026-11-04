@@ -2,7 +2,7 @@ const { Telegraf, Markup } = require('telegraf');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Fungsi Handler Menu Utama (bisa dipanggil via /start atau tombol kembali)
+// Fungsi Handler Menu Utama
 const showMainMenu = async (ctx, isEdit = false) => {
     const userName = ctx.from.first_name || 'Pelanggan';
     const text = `Halo *${userName}*! Selamat datang di *INDOSAKU Bot* ⚡\n\n` +
@@ -24,7 +24,7 @@ const showMainMenu = async (ctx, isEdit = false) => {
     }
 };
 
-// Command /start (Otomatis merespons saat user mengetik /start)
+// Command /start
 bot.start((ctx) => {
     return showMainMenu(ctx, false);
 });
@@ -116,12 +116,11 @@ bot.action(/^(topup_|game_).+/, (ctx) => {
     );
 });
 
-// Kontak Admin / CS
+// Kontak Admin / CS (Tanpa Email)
 bot.action('contact_admin', (ctx) => {
     return ctx.reply(
         `*📞 LAYANAN PELANGGAN INDOSAKU*\n\n` +
-        `• WhatsApp: \`08131611563\`\n` +
-        `• Email: \`aangpratama187@gmail.com\`\n\n` +
+        `• WhatsApp: \`08131611563\`\n\n` +
         `Silakan klik tombol di bawah untuk chat langsung dengan Admin:`,
         {
             parse_mode: 'Markdown',
@@ -138,11 +137,10 @@ bot.action('back_home', (ctx) => {
     return showMainMenu(ctx, true);
 });
 
-// Handler Input Teks (Nomor HP atau ID Pelanggan)
+// Handler Input Teks
 bot.on('text', async (ctx) => {
     const text = ctx.message.text.trim();
 
-    // Jika user mengetik /start secara manual di chat
     if (text === '/start') {
         return showMainMenu(ctx, false);
     }
