@@ -2,24 +2,31 @@ const { Telegraf, Markup } = require('telegraf');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Menu Utama /start
-bot.start((ctx) => {
+// Fungsi Handler Menu Utama (bisa dipanggil via /start atau tombol kembali)
+const showMainMenu = async (ctx, isEdit = false) => {
     const userName = ctx.from.first_name || 'Pelanggan';
-    return ctx.reply(
-        `Halo *${userName}*! Selamat datang di *INDOSAKU Bot* ⚡\n\n` +
-        `Pusat transaksi Pulsa, PPOB, E-Wallet, dan Voucher Game terpercaya.\n\n` +
-        `Silakan pilih menu transaksi di bawah ini:`,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('📱 Pulsa & Paket Data', 'menu_pulsa_data')],
-                [Markup.button.callback('💡 Tagihan PPOB (PLN/BPJS/PDAM)', 'menu_ppob_tagihan')],
-                [Markup.button.callback('💳 Top Up E-Wallet', 'menu_ewallet')],
-                [Markup.button.callback('🎮 Voucher Game', 'menu_games')],
-                [Markup.button.callback('📞 Hubungi Admin / CS', 'contact_admin')]
-            ])
-        }
-    );
+    const text = `Halo *${userName}*! Selamat datang di *INDOSAKU Bot* ⚡\n\n` +
+                 `Pusat transaksi Pulsa, PPOB, E-Wallet, dan Voucher Game terpercaya.\n\n` +
+                 `Silakan pilih menu transaksi di bawah ini:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback('📱 Pulsa & Paket Data', 'menu_pulsa_data')],
+        [Markup.button.callback('💡 Tagihan PPOB (PLN/BPJS/PDAM)', 'menu_ppob_tagihan')],
+        [Markup.button.callback('💳 Top Up E-Wallet', 'menu_ewallet')],
+        [Markup.button.callback('🎮 Voucher Game', 'menu_games')],
+        [Markup.button.callback('📞 Hubungi Admin / CS', 'contact_admin')]
+    ]);
+
+    if (isEdit) {
+        return ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
+    } else {
+        return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+    }
+};
+
+// Command /start (Otomatis merespons saat user mengetik /start)
+bot.start((ctx) => {
+    return showMainMenu(ctx, false);
 });
 
 // 1. Menu Pulsa & Paket Data
@@ -100,10 +107,10 @@ bot.action(['tagihan_pln', 'tagihan_bpjs', 'tagihan_pdam'], (ctx) => {
     );
 });
 
-// Sub-menu E-Wallet & Game (Meminta Nomor HP / ID Game)
+// Sub-menu E-Wallet & Game
 bot.action(/^(topup_|game_).+/, (ctx) => {
     return ctx.reply(
-        `📱 Produk yang Anda pilih berhasil dipilih.\n\n` +
+        `📱 Produk berhasil dipilih.\n\n` +
         `Silakan ketik nomor HP terdaftar (untuk E-Wallet) atau *User ID & Server ID* (untuk Game) di kolom chat untuk melanjutkan ke pembayaran QRIS.`,
         { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]]) }
     );
@@ -128,24 +135,18 @@ bot.action('contact_admin', (ctx) => {
 
 // Tombol Kembali ke Beranda
 bot.action('back_home', (ctx) => {
-    return ctx.editMessageText(
-        `*INDOSAKU BOT - Menu Utama*\n\nSilakan pilih layanan yang Anda butuhkan:`,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('📱 Pulsa & Paket Data', 'menu_pulsa_data')],
-                [Markup.button.callback('💡 Tagihan PPOB (PLN/BPJS/PDAM)', 'menu_ppob_tagihan')],
-                [Markup.button.callback('💳 Top Up E-Wallet', 'menu_ewallet')],
-                [Markup.button.callback('🎮 Voucher Game', 'menu_games')],
-                [Markup.button.callback('📞 Hubungi Admin / CS', 'contact_admin')]
-            ])
-        }
-    );
+    return showMainMenu(ctx, true);
 });
 
-// Handler Input Teks (Nomor HP dengan contoh baru 08123456789)
+// Handler Input Teks (Nomor HP atau ID Pelanggan)
 bot.on('text', async (ctx) => {
     const text = ctx.message.text.trim();
+
+    // Jika user mengetik /start secara manual di chat
+    if (text === '/start') {
+        return showMainMenu(ctx, false);
+    }
+
     if (text.startsWith('08') || text.startsWith('+62') || text.startsWith('62')) {
         return ctx.reply(
             `📱 Nomor Tujuan: *${text}* terdeteksi.\n\n` +
@@ -153,14 +154,14 @@ bot.on('text', async (ctx) => {
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
-                    [Markup.button.callback('Pulsa Rp 10.000 (QRIS)', 'checkout_qris_10k'), Markup.button.callback('Pulsa Rp 20.000 (QRIS', 'checkout_qris_20k')],
+                    [Markup.button.callback('Pulsa Rp 10.000 (QRIS)', 'checkout_qris_10k'), Markup.button.callback('Pulsa Rp 20.000 (QRIS)', 'checkout_qris_20k')],
                     [Markup.button.callback('Pulsa Rp 50.000 (QRIS)', 'checkout_qris_50k'), Markup.button.callback('Pulsa Rp 100.000 (QRIS)', 'checkout_qris_100k')],
                     [Markup.button.callback('« Batalkan', 'back_home')]
                 ])
             }
         );
     }
-    return ctx.reply(`Format teks tidak dikenali atau berupa ID Pelanggan. Ketik /start untuk kembali ke menu utama.`);
+    return ctx.reply(`Format teks diterima. Jika ingin kembali ke menu utama, silakan ketik /start.`);
 });
 
 // Simulasi Checkout / Pembuatan QRIS Payment Gateway
@@ -173,7 +174,6 @@ bot.action(/checkout_qris_.+/, async (ctx) => {
     else if (data.includes('50k')) { nominal = 'Rp 50.000'; amountNum = 50000; }
     else if (data.includes('100k')) { nominal = 'Rp 100.000'; amountNum = 100000; }
 
-    // Simulasi QRIS URL dari Gateway (BinderPay / sejenis)
     const simulatedQrisUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=INDOSAKU_PAYMENT_${amountNum}`;
 
     await ctx.reply(
@@ -208,7 +208,7 @@ module.exports = async (req, res) => {
             await bot.handleUpdate(req.body);
             res.status(200).send('OK');
         } else {
-            res.status(200).send('Bot Telegram INDOSAKU Lengkap Berjalan Aktif!');
+            res.status(200).send('Bot Telegram INDOSAKU Berjalan Aktif!');
         }
     } catch (error) {
         console.error(error);
