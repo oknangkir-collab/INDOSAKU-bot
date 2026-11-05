@@ -15,6 +15,29 @@ const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789';
 
 const userSession = {};
 
+// Helper untuk deteksi operator seluler dari nomor HP
+const detectOperator = (phone) => {
+    let cleanNo = phone.replace(/[^0-9]/g, '');
+    if (cleanNo.startsWith('62')) cleanNo = '0' + cleanNo.slice(2);
+    const prefix4 = cleanNo.slice(0, 4);
+    const prefix3 = cleanNo.slice(0, 3);
+
+    const telkomsel = ['0811', '0812', '0813', '0821', '0822', '0823', '0851', '0852', '0853'];
+    const indosat = ['0814', '0815', '0816', '0855', '0856', '0857', '0858'];
+    const xl = ['0817', '0818', '0819', '0859', '0877', '0878'];
+    const axis = ['0831', '0832', '0833', '0838'];
+    const tri = ['0895', '0896', '0897', '0898', '0899'];
+    const smartfren = ['0881', '0882', '0883', '0884', '0885', '0886', '0887', '0888', '0889'];
+
+    if (telkomsel.includes(prefix4) || telkomsel.some(p => cleanNo.startsWith(p))) return 'TELKOMSEL';
+    if (indosat.includes(prefix4) || indosat.some(p => cleanNo.startsWith(p))) return 'INDOSAT OOREDOO';
+    if (xl.includes(prefix4) || xl.some(p => cleanNo.startsWith(p))) return 'XL AXIATA';
+    if (axis.includes(prefix4) || axis.some(p => cleanNo.startsWith(p))) return 'AXIS';
+    if (tri.includes(prefix4) || tri.some(p => cleanNo.startsWith(p))) return 'TRI (3)';
+    if (smartfren.includes(prefix4) || smartfren.some(p => cleanNo.startsWith(p))) return 'SMARTFREN';
+    return 'SELULER UMUM';
+};
+
 const showMainMenu = async (ctx) => {
     const userName = ctx.from.first_name || 'Sobat INDOSAKU';
     const text = 
@@ -79,28 +102,38 @@ bot.action('start_live_chat', (ctx) => {
     );
 });
 
-// --- PILIH KATEGORI PRABAYAR / PASCABAYAR ---
+// --- PILIH KATEGORI UTAMA ---
 bot.action(/cat_(.+)/, async (ctx) => {
     const category = ctx.match[1];
     const userId = ctx.from.id;
     userSession[userId] = { category };
 
-    let title = 'LAYANAN';
-    let placeholder = 'Nomor HP / ID Tujuan';
+    // Sub-menu khusus E-Wallet
+    if (category === 'ewallet') {
+        userSession[userId].mode = 'ewallet_select';
+        return ctx.reply(
+            `💳 *PILIH PROVIDER E-WALLET*\n` +
+            `━━━━━━━━━━━━━━━━━━━\n` +
+            `Silakan pilih dompet digital tujuan Anda:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('🟢 DANA', 'ewallet_dana'), Markup.button.callback('🟣 OVO', 'ewallet_ovo')],
+                    [Markup.button.callback('🔵 GoPay', 'ewallet_gopay'), Markup.button.callback('🟠 ShopeePay', 'ewallet_shopeepay')],
+                    [Markup.button.callback('🟡 LinkAja', 'ewallet_linkaja')],
+                    [Markup.button.callback('« Batalkan', 'back_home')]
+                ])
+            }
+        );
+    }
 
-    if (category === 'pulsa') { title = '📱 PULSA REGULER'; placeholder = '08123456789'; }
-    else if (category === 'data') { title = '🌐 PAKET INTERNET / DATA'; placeholder = '08123456789'; }
-    else if (category === 'listrik') { title = '⚡ TOKEN PLN PRABAYAR'; placeholder = 'Nomor Meter / ID Pelanggan (11-12 digit)'; }
-    else if (category === 'ewallet') { title = '💳 TOP-UP E-WALLET (DANA/OVO/GoPay/ShopeePay)'; placeholder = 'Nomor HP Akun (08xxxx)'; }
-    else if (category === 'game') { title = '🎮 VOUCHER GAME'; placeholder = 'User ID & Server ID Game'; }
-    else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL'; placeholder = 'ID Pelanggan / Nomor Tujuan'; }
-    else if (category === 'etoll') { title = '🚗 TOP-UP E-TOLL / E-MONEY'; placeholder = 'Nomor Kartu E-Toll'; }
-    else if (category === 'pascabayar') {
+    // Sub-menu khusus Pascabayar
+    if (category === 'pascabayar') {
         userSession[userId].mode = 'postpaid_select';
         return ctx.reply(
             `📄 *PILIH KATEGORI PASCABAYAR*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
-            `Silakan pilih jenis tagihan pascabayar yang ingin dicek:`,
+            `Silakan pilih jenis tagihan pascabayar:`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
@@ -115,6 +148,18 @@ bot.action(/cat_(.+)/, async (ctx) => {
         );
     }
 
+    let title = 'LAYANAN';
+    let placeholder = 'Nomor HP / ID Tujuan';
+
+    if (category === 'pulsa') { title = '📱 PULSA REGULER'; placeholder = '08123456789'; }
+    else if (category === 'data') { title = '🌐 PAKET INTERNET / DATA'; placeholder = '08123456789'; }
+    else if (category === 'listrik') { title = '⚡ TOKEN PLN PRABAYAR'; placeholder = 'Nomor Meter / ID Pelanggan (11-12 digit)'; }
+    else if (category === 'game') { title = '🎮 VOUCHER GAME'; placeholder = 'User ID & Server ID Game'; }
+    else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL'; placeholder = 'ID Pelanggan / Nomor Tujuan'; }
+    else if (category === 'etoll') { title = '🚗 TOP-UP E-TOLL / E-MONEY'; placeholder = 'Nomor Kartu E-Toll'; }
+
+    userSession[userId].mode = 'waiting_target';
+
     return ctx.reply(
         `📂 *${title}*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
@@ -123,6 +168,23 @@ bot.action(/cat_(.+)/, async (ctx) => {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]])
         }
+    );
+});
+
+// Pilih Sub-Menu E-Wallet Spesifik
+bot.action(/ewallet_(.+)/, (ctx) => {
+    const walletType = ctx.match[1].toUpperCase();
+    const userId = ctx.from.id;
+    if (!userSession[userId]) userSession[userId] = {};
+
+    userSession[userId].walletType = walletType;
+    userSession[userId].mode = 'waiting_target';
+
+    return ctx.reply(
+        `💳 *TOP-UP ${walletType}*\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `Silakan kirim *Nomor HP Akun ${walletType}* Anda (Contoh: \`08123456789\`):`,
+        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]]) }
     );
 });
 
@@ -229,20 +291,31 @@ bot.on('text', async (ctx, next) => {
         }
     }
 
-    // 4. Proses Cek Harga Produk Prabayar (Service 85)
+    // 4. Proses Cek Harga Produk Prabayar (Service 85) dengan Deteksi Provider Otomatis
     if (!userSession[userId]) userSession[userId] = { category: 'pulsa' };
     userSession[userId].targetNo = text;
-    const category = userSession[userId].category;
+    let category = userSession[userId].category;
 
-    await ctx.reply(`⏳ Mengambil katalog harga ${category} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
+    // Jika kategori ewallet, gunakan parameter 'ewallet' standar binderpay
+    let apiCategory = category;
+    if (category === 'ewallet') apiCategory = 'ewallet';
+    if (category === 'listrik') apiCategory = 'pln';
+
+    // Deteksi Provider jika kategori Pulsa atau Paket Data
+    let providerInfo = '';
+    if (category === 'pulsa' || category === 'data') {
+        const detectedOp = detectOperator(text);
+        providerInfo = `🔍 *Provider Terdeteksi:* ${detectedOp}\n`;
+    }
+
+    await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
 
     try {
-        const priceRes = await binderPayClient.get(`/v1.0/bill-payment/prepaid/price?category=${category}&number=${text}`);
+        const priceRes = await binderPayClient.get(`/v1.0/bill-payment/prepaid/price?category=${apiCategory}&number=${text}`);
 
         if (priceRes.responseCode === '2008500' && priceRes.data && priceRes.data.length > 0) {
             userSession[userId].products = priceRes.data;
 
-            // Buat tombol daftar produk rapi
             const buttons = priceRes.data.slice(0, 10).map(prod => [
                 Markup.button.callback(`${prod.productName} - Rp ${parseInt(prod.price.value).toLocaleString('id-ID')}`, `buy_pre_${prod.productCode}`)
             ]);
@@ -250,15 +323,16 @@ bot.on('text', async (ctx, next) => {
 
             return ctx.reply(
                 `📱 *KATALOG PRODUK PRABAYAR*\n` +
-                `Tujuan: \`${text}\`\n\n` +
-                `Silakan pilih produk yang diinginkan:`,
+                `${providerInfo}` +
+                `🎯 Tujuan: \`${text}\`\n\n` +
+                `Silakan pilih nominal / kuota yang diinginkan:`,
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
             );
         }
-        return ctx.reply(`⚠️ Produk tidak ditemukan untuk kategori atau nomor tersebut.`);
+        return ctx.reply(`⚠️ Produk tidak ditemukan untuk kategori atau nomor tersebut. (Code: ${priceRes.responseCode})`);
     } catch (e) {
         console.error(e);
-        return ctx.reply('❌ Gagal mengambil daftar harga prabayar dari server.');
+        return ctx.reply('❌ Gagal mengambil daftar harga prabayar dari server BinderPay.');
     }
 });
 
