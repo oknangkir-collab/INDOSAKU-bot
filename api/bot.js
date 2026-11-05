@@ -101,15 +101,15 @@ bot.action('start_live_chat', (ctx) => {
     );
 });
 
-// --- PILIH KATEGORI UTAMA ---
+// --- PILIH KATEGORI UTAMA & SUB-MENU SPESIFIK ---
 bot.action(/cat_(.+)/, async (ctx) => {
     const category = ctx.match[1];
     const userId = ctx.from.id;
     userSession[userId] = { category };
 
-    // Sub-menu khusus E-Wallet
+    // 1. Sub-menu E-Wallet
     if (category === 'ewallet') {
-        userSession[userId].mode = 'ewallet_select';
+        userSession[userId].mode = 'sub_select';
         return ctx.reply(
             `💳 *PILIH PROVIDER E-WALLET*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
@@ -117,16 +117,72 @@ bot.action(/cat_(.+)/, async (ctx) => {
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
-                    [Markup.button.callback('🟢 DANA', 'ewallet_dana'), Markup.button.callback('🟣 OVO', 'ewallet_ovo')],
-                    [Markup.button.callback('🔵 GoPay', 'ewallet_gopay'), Markup.button.callback('🟠 ShopeePay', 'ewallet_shopeepay')],
-                    [Markup.button.callback('🟡 LinkAja', 'ewallet_linkaja')],
+                    [Markup.button.callback('🟢 DANA', 'sub_DANA'), Markup.button.callback('🟣 OVO', 'sub_OVO')],
+                    [Markup.button.callback('🔵 GoPay', 'sub_GOPAY'), Markup.button.callback('🟠 ShopeePay', 'sub_SHOPEEPAY')],
+                    [Markup.button.callback('🟡 LinkAja', 'sub_LINKAJA')],
                     [Markup.button.callback('« Batalkan', 'back_home')]
                 ])
             }
         );
     }
 
-    // Sub-menu khusus Pascabayar
+    // 2. Sub-menu Voucher Game
+    if (category === 'game') {
+        userSession[userId].mode = 'sub_select';
+        return ctx.reply(
+            `🎮 *PILIH VOUCHER GAME*\n` +
+            `━━━━━━━━━━━━━━━━━━━\n` +
+            `Silakan pilih game favorit Anda:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('⚔️ Mobile Legends', 'sub_ML'), Markup.button.callback('🔥 Free Fire', 'sub_FF')],
+                    [Markup.button.callback('🎯 PUBG Mobile', 'sub_PUBG'), Markup.button.callback('🪙 Valorant', 'sub_VALORANT')],
+                    [Markup.button.callback('🎲 Higgs Domino', 'sub_DOMINO'), Markup.button.callback('⚡ Genshin Impact', 'sub_GENSHIN')],
+                    [Markup.button.callback('« Batalkan', 'back_home')]
+                ])
+            }
+        );
+    }
+
+    // 3. Sub-menu Voucher Digital
+    if (category === 'voucher') {
+        userSession[userId].mode = 'sub_select';
+        return ctx.reply(
+            `🎫 *PILIH VOUCHER DIGITAL*\n` +
+            `━━━━━━━━━━━━━━━━━━━\n` +
+            `Silakan pilih jenis voucher digital:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('▶️ Google Play', 'sub_GOOGLEPLAY'), Markup.button.callback('🍏 App Store / iTunes', 'sub_ITUNES')],
+                    [Markup.button.callback('🎮 Steam Wallet', 'sub_STEAM'), Markup.button.callback('📺 Netflix / Vidio', 'sub_STREAMING')],
+                    [Markup.button.callback('« Batalkan', 'back_home')]
+                ])
+            }
+        );
+    }
+
+    // 4. Sub-menu E-Toll / E-Money
+    if (category === 'etoll') {
+        userSession[userId].mode = 'sub_select';
+        return ctx.reply(
+            `🚗 *PILIH KARTU E-TOLL / E-MONEY*\n` +
+            `━━━━━━━━━━━━━━━━━━━\n` +
+            `Silakan pilih jenis kartu emoney Anda:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('💳 Mandiri e-Toll / e-Money', 'sub_ETOH_MANDIRI')],
+                    [Markup.button.callback('💳 BCA Flazz', 'sub_ETOH_FLAZZ')],
+                    [Markup.button.callback('💳 BNI TapCash', 'sub_ETOH_TAPCASH')],
+                    [Markup.button.callback('« Batalkan', 'back_home')]
+                ])
+            }
+        );
+    }
+
+    // 5. Sub-menu Pascabayar
     if (category === 'pascabayar') {
         userSession[userId].mode = 'postpaid_select';
         return ctx.reply(
@@ -153,9 +209,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
     if (category === 'pulsa') { title = '📱 PULSA REGULER'; placeholder = '08123456789'; }
     else if (category === 'data') { title = '🌐 PAKET INTERNET / DATA'; placeholder = '08123456789'; }
     else if (category === 'listrik') { title = '⚡ TOKEN PLN PRABAYAR'; placeholder = 'Nomor Meter / ID Pelanggan (11-12 digit)'; }
-    else if (category === 'game') { title = '🎮 VOUCHER GAME'; placeholder = 'User ID & Server ID Game'; }
-    else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL'; placeholder = 'ID Pelanggan / Nomor Tujuan'; }
-    else if (category === 'etoll') { title = '🚗 TOP-UP E-TOLL / E-MONEY'; placeholder = 'Nomor Kartu E-Toll'; }
 
     userSession[userId].mode = 'waiting_target';
 
@@ -170,19 +223,28 @@ bot.action(/cat_(.+)/, async (ctx) => {
     );
 });
 
-// Pilih Sub-Menu E-Wallet Spesifik
-bot.action(/ewallet_(.+)/, (ctx) => {
-    const walletType = ctx.match[1].toUpperCase();
+// Pilih Sub-Menu Spesifik (E-Wallet, Game, Voucher, E-Toll)
+bot.action(/sub_(.+)/, (ctx) => {
+    const subType = ctx.match[1];
     const userId = ctx.from.id;
     if (!userSession[userId]) userSession[userId] = {};
 
-    userSession[userId].walletType = walletType;
+    userSession[userId].subType = subType;
     userSession[userId].mode = 'waiting_target';
 
+    let placeholder = 'Nomor Tujuan / ID Pelanggan';
+    if (subType === 'ML' || subType === 'FF' || subType === 'PUBG' || subType === 'VALORANT' || subType === 'DOMINO' || subType === 'GENSHIN') {
+        placeholder = 'User ID & Server ID (Contoh: 12345678(1234))';
+    } else if (['DANA', 'OVO', 'GOPAY', 'SHOPEEPAY', 'LINKAJA'].includes(subType)) {
+        placeholder = `Nomor HP Akun ${subType} (Contoh: 08123456789)`;
+    } else if (subType.startsWith('ETOH_') || subType === 'GOOGLEPLAY' || subType === 'STEAM') {
+        placeholder = 'Nomor Kartu / ID Voucher / Nomor HP';
+    }
+
     return ctx.reply(
-        `💳 *TOP-UP ${walletType}*\n` +
+        `🎯 *LAYANAN: ${subType.replace('_', ' ')}*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `Silakan kirim *Nomor HP Akun ${walletType}* Anda (Contoh: \`08123456789\`):`,
+        `Silakan kirim *${placeholder}* Anda ke chat ini:`,
         { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]]) }
     );
 });
@@ -296,7 +358,9 @@ bot.on('text', async (ctx, next) => {
     let category = userSession[userId].category;
 
     let apiCategory = category;
-    if (category === 'ewallet') apiCategory = 'ewallet';
+    if (category === 'ewallet' || category === 'game' || category === 'voucher' || category === 'etoll') {
+        apiCategory = category; // Menggunakan kategori binderpay yang sesuai
+    }
     if (category === 'listrik') apiCategory = 'pln';
 
     let providerInfo = '';
@@ -305,7 +369,8 @@ bot.on('text', async (ctx, next) => {
         providerInfo = `🔍 *Provider Terdeteksi:* ${detectedOp}\n`;
     }
 
-    await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
+    const subTitleLabel = userSession[userId].subType ? ` (${userSession[userId].subType})` : '';
+    await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category}${subTitleLabel} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
 
     try {
         const endpoint = `/v1.0/bill-payment/prepaid/price?category=${apiCategory}&number=${text}`;
@@ -323,11 +388,11 @@ bot.on('text', async (ctx, next) => {
                 `📱 *KATALOG PRODUK PRABAYAR*\n` +
                 `${providerInfo}` +
                 `🎯 Tujuan: \`${text}\`\n\n` +
-                `Silakan pilih nominal / kuota yang diinginkan:`,
+                `Silakan pilih nominal / produk yang diinginkan:`,
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
             );
         }
-        return ctx.reply(`⚠️ Produk tidak tersedia atau nomor tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
+        return ctx.reply(`⚠️ Produk tidak tersedia atau nomor/ID tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
     } catch (e) {
         console.error('BinderPay Price Error:', e);
         return ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau saldo/akses Partner ID Anda.');
@@ -348,7 +413,7 @@ bot.action(/buy_pre_(.+)/, async (ctx) => {
     if (!selectedProduct) return ctx.reply('⚠️ Produk tidak valid.');
 
     const trxId = `TRX-PRE-${Date.now()}`;
-    await ctx.reply(`⏳ Memproses pembelian *${selectedProduct.productName}* ke nomor \`${session.targetNo}\`...`, { parse_mode: 'Markdown' });
+    await ctx.reply(`⏳ Memproses pembelian *${selectedProduct.productName}* ke tujuan \`${session.targetNo}\`...`, { parse_mode: 'Markdown' });
 
     try {
         const purchaseRes = await binderPayClient.post('POST', '/v1.0/bill-payment/prepaid/purchase', {
@@ -361,7 +426,8 @@ bot.action(/buy_pre_(.+)/, async (ctx) => {
                 currency: 'IDR'
             },
             additionalInfo: {
-                category: session.category
+                category: session.category,
+                subType: session.subType || ''
             }
         });
 
@@ -436,7 +502,7 @@ module.exports = async (req, res) => {
             await bot.handleUpdate(req.body);
             return res.status(200).send('OK');
         }
-        return res.status(200).send('Bot Telegram INDOSAKU PPOB SNAP Full Features Berjalan di Vercel!');
+        return res.status(200).send('Bot Telegram INDOSAKU PPOB SNAP Full Sub-Menu Berjalan di Vercel!');
     } catch (error) {
         console.error('Webhook Error:', error);
         return res.status(500).send('Internal Server Error');
