@@ -11,23 +11,18 @@ const binderPayClient = new BinderPay({
 });
 
 const INDOSAKU_LOGO_URL = 'https://ibb.co.com/1G94Bcm9';
-
-// Ganti dengan TELEGRAM USER ID Anda (angka ID Telegram admin tempat notifikasi live chat masuk)
-// Cara cek ID Telegram Anda bisa lewat bot @userinfobot di Telegram
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789'; 
 
-// Temporary session user
 const userSession = {};
 
-const showMainMenu = async (ctx, isPhoto = false) => {
+const showMainMenu = async (ctx) => {
     const userName = ctx.from.first_name || 'Sobat INDOSAKU';
     const text = 
         `⚡ *INDOSAKU DIGITAL & PPOB* ⚡\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `Halo *${userName}*! Platform transaksi digital & PPOB terpercaya di Cibinong, Bogor.\n\n` +
+        `Halo *${userName}*! Platform transaksi digital & PPOB terpercaya di Cibinong, Bogor[span_0](start_span)[span_0](end_span).\n\n` +
         `💡 *Silakan pilih layanan di bawah ini:*`;
     
-    // Desain tata letak tombol grid 2 kolom yang rapi
     const keyboard = Markup.inlineKeyboard([
         [
             Markup.button.callback('📱 Pulsa Reguler', 'cat_pulsa'),
@@ -50,10 +45,7 @@ const showMainMenu = async (ctx, isPhoto = false) => {
     ]);
 
     try {
-        if (isPhoto) {
-            return ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
-        }
-        return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+        return ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
     } catch (e) {
         return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
     }
@@ -61,12 +53,12 @@ const showMainMenu = async (ctx, isPhoto = false) => {
 
 bot.start((ctx) => {
     delete userSession[ctx.from.id];
-    return showMainMenu(ctx, true);
+    return showMainMenu(ctx);
 });
 
 bot.action('back_home', (ctx) => {
     delete userSession[ctx.from.id];
-    return showMainMenu(ctx, false);
+    return ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
 });
 
 // --- FITUR LIVE CHAT VIA BOT ---
@@ -74,10 +66,10 @@ bot.action('start_live_chat', (ctx) => {
     const userId = ctx.from.id;
     userSession[userId] = { mode: 'live_chat' };
 
-    return ctx.editMessageText(
+    return ctx.reply(
         `💬 *LIVE CHAT DENGAN ADMIN INDOSAKU*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `Anda sekarang terhubung ke sistem Live Chat. Silakan ketik pesan, kendala, atau pertanyaan Anda di chat ini.\n\n` +
+        `Anda terhubung ke sistem Live Chat. Silakan ketik pesan atau kendala Anda di chat ini.\n\n` +
         `Admin kami akan segera membalas pesan Anda.\n\n` +
         `_Ketik /start jika ingin keluar dari mode live chat._`,
         {
@@ -103,7 +95,7 @@ bot.action(/cat_(.+)/, (ctx) => {
     else if (category === 'pascabayar') { title = '📄 TAGIHAN PASCABAYAR (PLN/PDAM/BPJS)'; placeholder = 'Nomor Pelanggan Pascabayar'; }
     else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL & E-TOLL'; placeholder = 'Nomor Kartu / ID Pelanggan'; }
 
-    return ctx.editMessageText(
+    return ctx.reply(
         `📂 *${title}*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan kirim *${placeholder}* Anda ke chat ini:`,
@@ -119,15 +111,14 @@ bot.on('text', async (ctx, next) => {
     const text = ctx.message.text.trim();
     if (text === '/start') {
         delete userSession[ctx.from.id];
-        return showMainMenu(ctx, true);
+        return showMainMenu(ctx);
     }
 
     const userId = ctx.from.id.toString();
 
-    // 1. JIKA ADMIN MEMBALAS PESAN DI TELEGRAM (Reply pesan yang diforward dari user)
+    // 1. JIKA ADMIN MEMBALAS PESAN DI TELEGRAM
     if (userId === ADMIN_TELEGRAM_ID.toString() && ctx.message.reply_to_message) {
         const repliedText = ctx.message.reply_to_message.text || '';
-        // Ekstraksi ID User dari teks forward / pesan asli
         const matchId = repliedText.match(/ID User:\s*`(\d+)`/) || repliedText.match(/Dari:\s*`(\d+)`/);
         
         if (matchId) {
@@ -140,7 +131,7 @@ bot.on('text', async (ctx, next) => {
                 );
                 return ctx.reply('✅ Balasan berhasil dikirim ke user.');
             } catch (err) {
-                return ctx.reply('❌ Gagal mengirim pesan ke user (mungkin user memblokir bot).');
+                return ctx.reply('❌ Gagal mengirim pesan ke user.');
             }
         }
     }
@@ -150,7 +141,6 @@ bot.on('text', async (ctx, next) => {
         const userName = ctx.from.first_name || 'Tanpa Nama';
         const userUsername = ctx.from.username ? `@${ctx.from.username}` : 'Tanpa Username';
         
-        // Kirim notifikasi/forward pesan user ke Telegram Admin
         try {
             await bot.telegram.sendMessage(
                 ADMIN_TELEGRAM_ID,
@@ -159,12 +149,12 @@ bot.on('text', async (ctx, next) => {
                 `👤 Nama: ${userName} (${userUsername})\n` +
                 `🆔 ID User: \`${userId}\`\n\n` +
                 `💬 *Pesan:* ${text}\n\n` +
-                `_⚠️ (Reply pesan ini langsung di Telegram untuk membalas user)_`,
+                `_⚠️ (Reply pesan ini langsung di Telegram untuk membalas)_`,
                 { parse_mode: 'Markdown' }
             );
-            return ctx.reply('💬 Pesan Anda telah dikirim ke Admin. Mohon tunggu balasan dari kami ya!');
+            return ctx.reply('💬 Pesan Anda telah diteruskan ke Admin. Mohon tunggu balasan berikutnya!');
         } catch (err) {
-            return ctx.reply('❌ Gagal mengirim pesan live chat. Silakan coba beberapa saat lagi.');
+            return ctx.reply('❌ Gagal mengirim pesan live chat.');
         }
     }
 
@@ -186,23 +176,6 @@ bot.on('text', async (ctx, next) => {
 
     userSession[userId].targetNo = text;
     const cat = userSession[userId].category;
-
-    if (cat === 'pascabayar') {
-        return ctx.reply(
-            `📄 *PILIH JENIS TAGIHAN PASCABAYAR*\n` +
-            `Tujuan: \`${text}\`\n\n` +
-            `Silakan pilih kategori tagihan di bawah:`,
-            {
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                    [Markup.button.callback('⚡ PLN Pascabayar', 'post_PLNPOSTPAIDB')],
-                    [Markup.button.callback('💧 PDAM Daerah', 'post_PDAM1001'), Markup.button.callback('🏥 BPJS Kesehatan', 'post_BPJSKES')],
-                    [Markup.button.callback('📞 Telkom / Indihome', 'post_TELKOMPSTN'), Markup.button.callback('📺 TV Berbayar', 'post_TVINDVS')],
-                    [Markup.button.callback('« Batalkan', 'back_home')]
-                ])
-            }
-        );
-    }
 
     return ctx.reply(
         `🎯 *TUJUAN: \`${text}\`*\n` +
@@ -234,7 +207,7 @@ bot.action(/nom_(\d+)/, (ctx) => {
 bot.action('nom_custom', (ctx) => {
     const userId = ctx.from.id;
     userSession[userId].waitingCustomAmount = true;
-    return ctx.editMessageText(
+    return ctx.reply(
         `✍️ *CUSTOM NOMINAL PEMBAYARAN*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan ketik angka nominal saja di chat (Contoh: \`15000\` atau \`75000\` tanpa titik/koma):`,
@@ -258,11 +231,7 @@ const askPaymentMethod = async (ctx, amount) => {
         [Markup.button.callback('« Kembali ke Menu Utama', 'back_home')]
     ]);
 
-    try {
-        return ctx.editMessageText(text, { parse_mode: 'Markdown', ...keyboard });
-    } catch (e) {
-        return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
-    }
+    return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
 };
 
 // 1. Eksekusi Pembayaran QRIS (Service 47)
@@ -345,7 +314,7 @@ module.exports = async (req, res) => {
             await bot.handleUpdate(req.body);
             return res.status(200).send('OK');
         }
-        return res.status(200).send('Bot INDOSAKU PPOB Aktif & Berjalan di Vercel!');
+        return res.status(200).send('Bot Telegram INDOSAKU PPOB Aktif & Berjalan di Vercel!');
     } catch (error) {
         console.error('Webhook Error:', error);
         return res.status(500).send('Internal Server Error');
