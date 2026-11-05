@@ -20,7 +20,6 @@ const detectOperator = (phone) => {
     let cleanNo = phone.replace(/[^0-9]/g, '');
     if (cleanNo.startsWith('62')) cleanNo = '0' + cleanNo.slice(2);
     const prefix4 = cleanNo.slice(0, 4);
-    const prefix3 = cleanNo.slice(0, 3);
 
     const telkomsel = ['0811', '0812', '0813', '0821', '0822', '0823', '0851', '0852', '0853'];
     const indosat = ['0814', '0815', '0816', '0855', '0856', '0857', '0858'];
@@ -291,17 +290,15 @@ bot.on('text', async (ctx, next) => {
         }
     }
 
-    // 4. Proses Cek Harga Produk Prabayar (Service 85) dengan Deteksi Provider Otomatis
+    // 4. Proses Cek Harga Produk Prabayar (Service 85)
     if (!userSession[userId]) userSession[userId] = { category: 'pulsa' };
     userSession[userId].targetNo = text;
     let category = userSession[userId].category;
 
-    // Jika kategori ewallet, gunakan parameter 'ewallet' standar binderpay
     let apiCategory = category;
     if (category === 'ewallet') apiCategory = 'ewallet';
     if (category === 'listrik') apiCategory = 'pln';
 
-    // Deteksi Provider jika kategori Pulsa atau Paket Data
     let providerInfo = '';
     if (category === 'pulsa' || category === 'data') {
         const detectedOp = detectOperator(text);
@@ -311,9 +308,10 @@ bot.on('text', async (ctx, next) => {
     await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
 
     try {
-        const priceRes = await binderPayClient.get(`/v1.0/bill-payment/prepaid/price?category=${apiCategory}&number=${text}`);
+        const endpoint = `/v1.0/bill-payment/prepaid/price?category=${apiCategory}&number=${text}`;
+        const priceRes = await binderPayClient.get(endpoint);
 
-        if (priceRes.responseCode === '2008500' && priceRes.data && priceRes.data.length > 0) {
+        if (priceRes && priceRes.responseCode === '2008500' && priceRes.data && priceRes.data.length > 0) {
             userSession[userId].products = priceRes.data;
 
             const buttons = priceRes.data.slice(0, 10).map(prod => [
@@ -329,10 +327,10 @@ bot.on('text', async (ctx, next) => {
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
             );
         }
-        return ctx.reply(`⚠️ Produk tidak ditemukan untuk kategori atau nomor tersebut. (Code: ${priceRes.responseCode})`);
+        return ctx.reply(`⚠️ Produk tidak tersedia atau nomor tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
     } catch (e) {
-        console.error(e);
-        return ctx.reply('❌ Gagal mengambil daftar harga prabayar dari server BinderPay.');
+        console.error('BinderPay Price Error:', e);
+        return ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau saldo/akses Partner ID Anda.');
     }
 });
 
