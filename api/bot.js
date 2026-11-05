@@ -20,7 +20,7 @@ const showMainMenu = async (ctx) => {
     const text = 
         `⚡ *INDOSAKU DIGITAL & PPOB* ⚡\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `Halo *${userName}*! Platform transaksi digital & PPOB terpercaya di Cibinong, Bogor[span_0](start_span)[span_0](end_span).\n\n` +
+        `Halo *${userName}*! Platform transaksi digital & PPOB terpercaya di Cibinong, Bogor.\n\n` +
         `💡 *Silakan pilih layanan di bawah ini:*`;
     
     const keyboard = Markup.inlineKeyboard([
@@ -29,15 +29,16 @@ const showMainMenu = async (ctx) => {
             Markup.button.callback('🌐 Paket Internet', 'cat_data')
         ],
         [
-            Markup.button.callback('⚡ Token PLN', 'cat_pln'),
+            Markup.button.callback('⚡ Token PLN', 'cat_listrik'),
             Markup.button.callback('💳 TopUp E-Wallet', 'cat_ewallet')
         ],
         [
             Markup.button.callback('🎮 Voucher Game', 'cat_game'),
-            Markup.button.callback('📄 Tagihan Pascabayar', 'cat_pascabayar')
+            Markup.button.callback('🎫 Voucher Digital', 'cat_voucher')
         ],
         [
-            Markup.button.callback('🎫 Voucher Digital & Lainnya', 'cat_voucher')
+            Markup.button.callback('🚗 TopUp E-Toll', 'cat_etoll'),
+            Markup.button.callback('📄 Tagihan Pascabayar', 'cat_pascabayar')
         ],
         [
             Markup.button.callback('💬 Live Chat dengan Admin (CS)', 'start_live_chat')
@@ -61,7 +62,7 @@ bot.action('back_home', (ctx) => {
     return ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
 });
 
-// --- FITUR LIVE CHAT VIA BOT ---
+// --- LIVE CHAT ADMIN VIA BOT ---
 bot.action('start_live_chat', (ctx) => {
     const userId = ctx.from.id;
     userSession[userId] = { mode: 'live_chat' };
@@ -69,8 +70,7 @@ bot.action('start_live_chat', (ctx) => {
     return ctx.reply(
         `💬 *LIVE CHAT DENGAN ADMIN INDOSAKU*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
-        `Anda terhubung ke sistem Live Chat. Silakan ketik pesan atau kendala Anda di chat ini.\n\n` +
-        `Admin kami akan segera membalas pesan Anda.\n\n` +
+        `Silakan ketik pesan atau kendala transaksi Anda di chat ini. Admin akan segera merespons.\n\n` +
         `_Ketik /start jika ingin keluar dari mode live chat._`,
         {
             parse_mode: 'Markdown',
@@ -79,21 +79,41 @@ bot.action('start_live_chat', (ctx) => {
     );
 });
 
-// Handler Kategori Layanan PPOB
-bot.action(/cat_(.+)/, (ctx) => {
+// --- PILIH KATEGORI PRABAYAR / PASCABAYAR ---
+bot.action(/cat_(.+)/, async (ctx) => {
     const category = ctx.match[1];
-    userSession[ctx.from.id] = { category };
+    const userId = ctx.from.id;
+    userSession[userId] = { category };
 
     let title = 'LAYANAN';
     let placeholder = 'Nomor HP / ID Tujuan';
 
-    if (category === 'pulsa') { title = '📱 PULSA REGULER SEMUA OPERATOR'; placeholder = '08123456789'; }
-    else if (category === 'data') { title = '🌐 PAKET DATA INTERNET'; placeholder = '08123456789'; }
-    else if (category === 'pln') { title = '⚡ TOKEN PLN PRABAYAR'; placeholder = 'Nomor Meter / ID Pelanggan (11-12 digit)'; }
-    else if (category === 'ewallet') { title = '💳 TOP UP E-WALLET (DANA/OVO/GoPay/ShopeePay)'; placeholder = 'Nomor HP Akun (08xxxx)'; }
-    else if (category === 'game') { title = '🎮 TOP UP VOUCHER GAME (ML/FF/PUBG/dll)'; placeholder = 'User ID & Server ID'; }
-    else if (category === 'pascabayar') { title = '📄 TAGIHAN PASCABAYAR (PLN/PDAM/BPJS)'; placeholder = 'Nomor Pelanggan Pascabayar'; }
-    else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL & E-TOLL'; placeholder = 'Nomor Kartu / ID Pelanggan'; }
+    if (category === 'pulsa') { title = '📱 PULSA REGULER'; placeholder = '08123456789'; }
+    else if (category === 'data') { title = '🌐 PAKET INTERNET / DATA'; placeholder = '08123456789'; }
+    else if (category === 'listrik') { title = '⚡ TOKEN PLN PRABAYAR'; placeholder = 'Nomor Meter / ID Pelanggan (11-12 digit)'; }
+    else if (category === 'ewallet') { title = '💳 TOP-UP E-WALLET (DANA/OVO/GoPay/ShopeePay)'; placeholder = 'Nomor HP Akun (08xxxx)'; }
+    else if (category === 'game') { title = '🎮 VOUCHER GAME'; placeholder = 'User ID & Server ID Game'; }
+    else if (category === 'voucher') { title = '🎫 VOUCHER DIGITAL'; placeholder = 'ID Pelanggan / Nomor Tujuan'; }
+    else if (category === 'etoll') { title = '🚗 TOP-UP E-TOLL / E-MONEY'; placeholder = 'Nomor Kartu E-Toll'; }
+    else if (category === 'pascabayar') {
+        userSession[userId].mode = 'postpaid_select';
+        return ctx.reply(
+            `📄 *PILIH KATEGORI PASCABAYAR*\n` +
+            `━━━━━━━━━━━━━━━━━━━\n` +
+            `Silakan pilih jenis tagihan pascabayar yang ingin dicek:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('⚡ PLN Pascabayar', 'postcode_PLNPOSTPAIDB')],
+                    [Markup.button.callback('💧 PDAM Daerah', 'postcode_PDAM1001')],
+                    [Markup.button.callback('📱 Telco Pascabayar (Halo/Matrix)', 'postcode_DMATRIX')],
+                    [Markup.button.callback('🏥 BPJS Kesehatan', 'postcode_BPJSKES')],
+                    [Markup.button.callback('📺 TV Berbayar', 'postcode_TVINDVS'), Markup.button.callback('🔥 Gas PGN', 'postcode_PGN')],
+                    [Markup.button.callback('« Batalkan', 'back_home')]
+                ])
+            }
+        );
+    }
 
     return ctx.reply(
         `📂 *${title}*\n` +
@@ -101,12 +121,29 @@ bot.action(/cat_(.+)/, (ctx) => {
         `Silakan kirim *${placeholder}* Anda ke chat ini:`,
         {
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan & Kembali', 'back_home')]])
+            ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]])
         }
     );
 });
 
-// Tangkap Input Teks & Mengelola Live Chat / PPOB
+// Pilih Product Code Pascabayar
+bot.action(/postcode_(.+)/, (ctx) => {
+    const productCode = ctx.match[1];
+    const userId = ctx.from.id;
+    if (!userSession[userId]) userSession[userId] = {};
+    
+    userSession[userId].productCode = productCode;
+    userSession[userId].mode = 'waiting_postpaid_customer';
+
+    return ctx.reply(
+        `📄 *INQUIRY PASCABAYAR (${productCode})*\n` +
+        `━━━━━━━━━━━━━━━━━━━\n` +
+        `Silakan kirim *Nomor Pelanggan / ID Tagihan* Anda:`,
+        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]]) }
+    );
+});
+
+// --- MENANGANI PESAN TEKS MASUK ---
 bot.on('text', async (ctx, next) => {
     const text = ctx.message.text.trim();
     if (text === '/start') {
@@ -116,195 +153,208 @@ bot.on('text', async (ctx, next) => {
 
     const userId = ctx.from.id.toString();
 
-    // 1. JIKA ADMIN MEMBALAS PESAN DI TELEGRAM
+    // 1. Admin Membalas Live Chat
     if (userId === ADMIN_TELEGRAM_ID.toString() && ctx.message.reply_to_message) {
         const repliedText = ctx.message.reply_to_message.text || '';
         const matchId = repliedText.match(/ID User:\s*`(\d+)`/) || repliedText.match(/Dari:\s*`(\d+)`/);
-        
         if (matchId) {
-            const targetUserChatId = matchId[1];
+            const targetUser = matchId[1];
             try {
-                await bot.telegram.sendMessage(
-                    targetUserChatId,
-                    `💬 *Pesan dari Admin INDOSAKU:*\n\n${text}`,
-                    { parse_mode: 'Markdown' }
-                );
-                return ctx.reply('✅ Balasan berhasil dikirim ke user.');
+                await bot.telegram.sendMessage(targetUser, `💬 *Pesan dari Admin INDOSAKU:*\n\n${text}`, { parse_mode: 'Markdown' });
+                return ctx.reply('✅ Balasan terkirim ke user.');
             } catch (err) {
-                return ctx.reply('❌ Gagal mengirim pesan ke user.');
+                return ctx.reply('❌ Gagal mengirim pesan.');
             }
         }
     }
 
-    // 2. JIKA USER SEDANG DALAM MODE LIVE CHAT
+    // 2. Mode Live Chat Pengguna Aktif
     if (userSession[userId] && userSession[userId].mode === 'live_chat') {
-        const userName = ctx.from.first_name || 'Tanpa Nama';
-        const userUsername = ctx.from.username ? `@${ctx.from.username}` : 'Tanpa Username';
-        
         try {
             await bot.telegram.sendMessage(
                 ADMIN_TELEGRAM_ID,
-                `🔔 *PESAN LIVE CHAT MASUK*\n` +
-                `━━━━━━━━━━━━━━━━━━━\n` +
-                `👤 Nama: ${userName} (${userUsername})\n` +
-                `🆔 ID User: \`${userId}\`\n\n` +
-                `💬 *Pesan:* ${text}\n\n` +
-                `_⚠️ (Reply pesan ini langsung di Telegram untuk membalas)_`,
+                `🔔 *LIVE CHAT MASUK*\n👤 ${ctx.from.first_name} (\`${userId}\`)\n\n💬 ${text}`,
                 { parse_mode: 'Markdown' }
             );
-            return ctx.reply('💬 Pesan Anda telah diteruskan ke Admin. Mohon tunggu balasan berikutnya!');
-        } catch (err) {
+            return ctx.reply('💬 Pesan diteruskan ke Admin. Mohon tunggu balasan!');
+        } catch (e) {
             return ctx.reply('❌ Gagal mengirim pesan live chat.');
         }
     }
 
-    // 3. JIKA USER SEDANG DALAM PROSES CUSTOM NOMINAL
-    if (userSession[userId] && userSession[userId].waitingCustomAmount) {
-        const customAmount = parseInt(text.replace(/[^0-9]/g, ''));
-        if (isNaN(customAmount) || customAmount < 1000) {
-            return ctx.reply('⚠️ Nominal tidak valid. Masukkan angka minimal Rp 1.000.');
-        }
-        userSession[userId].waitingCustomAmount = false;
-        userSession[userId].amount = customAmount.toString();
-        return askPaymentMethod(ctx, customAmount);
-    }
+    // 3. Proses Inquiry Pascabayar (Service 86)
+    if (userSession[userId] && userSession[userId].mode === 'waiting_postpaid_customer') {
+        const productCode = userSession[userId].productCode;
+        const trxId = `INQ-POS-${Date.now()}`;
 
-    // 4. JIKA USER MENGIRIM NOMOR TUJUAN PPOB
-    if (!userSession[userId]) {
-        userSession[userId] = { category: 'pulsa' };
-    }
+        await ctx.reply(`⏳ Memeriksa rincian tagihan untuk nomor \`${text}\`...`, { parse_mode: 'Markdown' });
 
-    userSession[userId].targetNo = text;
-    const cat = userSession[userId].category;
-
-    return ctx.reply(
-        `🎯 *TUJUAN: \`${text}\`*\n` +
-        `Silakan pilih nominal atau gunakan tombol *Custom Nominal* untuk mengisi nominal sendiri:`,
-        {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('Rp 5.000', 'nom_5000'), Markup.button.callback('Rp 10.000', 'nom_10000')],
-                [Markup.button.callback('Rp 20.000', 'nom_20000'), Markup.button.callback('Rp 25.000', 'nom_25000')],
-                [Markup.button.callback('Rp 50.000', 'nom_50000'), Markup.button.callback('Rp 100.000', 'nom_100000')],
-                [Markup.button.callback('Rp 200.000', 'nom_200000'), Markup.button.callback('✍️ Custom Nominal', 'nom_custom')],
-                [Markup.button.callback('« Batalkan & Kembali', 'back_home')]
-            ])
-        }
-    );
-});
-
-// Handler Pilihan Nominal Tetap
-bot.action(/nom_(\d+)/, (ctx) => {
-    const nominal = ctx.match[1];
-    const userId = ctx.from.id;
-    if (!userSession[userId]) userSession[userId] = {};
-    userSession[userId].amount = nominal;
-
-    return askPaymentMethod(ctx, nominal);
-});
-
-// Handler Custom Nominal
-bot.action('nom_custom', (ctx) => {
-    const userId = ctx.from.id;
-    userSession[userId].waitingCustomAmount = true;
-    return ctx.reply(
-        `✍️ *CUSTOM NOMINAL PEMBAYARAN*\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `Silakan ketik angka nominal saja di chat (Contoh: \`15000\` atau \`75000\` tanpa titik/koma):`,
-        { parse_mode: 'Markdown' }
-    );
-});
-
-const askPaymentMethod = async (ctx, amount) => {
-    const formattedAmount = parseInt(amount).toLocaleString('id-ID');
-    const text = 
-        `💰 *TOTAL PEMBAYARAN: Rp ${formattedAmount}*\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `Pilih metode pembayaran otomatis via BinderPay:`;
-
-    const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('⚡ QRIS Instant (All Payment / E-Wallet)', `pay_qris_${amount}`)],
-        [Markup.button.callback('🏦 Virtual Account BCA', `pay_va_BCA_${amount}`)],
-        [Markup.button.callback('🏦 Virtual Account BRI', `pay_va_BRI_${amount}`)],
-        [Markup.button.callback('🏦 Virtual Account Mandiri', `pay_va_MANDIRI_${amount}`)],
-        [Markup.button.callback('🏦 Virtual Account BSI / Permata', `pay_va_PERMATA_${amount}`)],
-        [Markup.button.callback('« Kembali ke Menu Utama', 'back_home')]
-    ]);
-
-    return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
-};
-
-// 1. Eksekusi Pembayaran QRIS (Service 47)
-bot.action(/pay_qris_(\d+)/, async (ctx) => {
-    const amount = ctx.match[1];
-    const trxId = `INDOSAKU-QR-${Date.now()}`;
-
-    try {
-        await ctx.reply('⏳ Menghubungkan ke gateway BinderPay untuk membuat QRIS...');
-        const res = await binderPayClient.qris.generate({
-            partnerReferenceNo: trxId,
-            amount: { value: `${amount}.00`, currency: 'IDR' },
-            additionalInfo: { isStatic: false }
-        });
-
-        if (res.responseCode === '2004700') {
-            await ctx.reply(
-                `✅ *QRIS INSTANT BERHASIL DIBUAT*\n` +
-                `━━━━━━━━━━━━━━━━━━━\n` +
-                `🆔 Ref ID: \`${trxId}\`\n` +
-                `💰 Total Bayar: *Rp ${parseInt(amount).toLocaleString('id-ID')}*\n\n` +
-                `Silakan scan menggunakan BCA Mobile, DANA, OVO, GoPay, ShopeePay, atau Mobile Banking lainnya:`,
-                { parse_mode: 'Markdown' }
-            );
-            return ctx.replyWithPhoto(res.qrUrl, {
-                ...Markup.inlineKeyboard([[Markup.button.callback('« Selesai / Menu Utama', 'back_home')]])
+        try {
+            const inquiryRes = await binderPayClient.post('POST', '/v1.0/bill-payment/inquiry', {
+                partnerServiceId: '86',
+                customerNo: text,
+                productCode: productCode,
+                trxId: trxId,
+                additionalInfo: {}
             });
+
+            if (inquiryRes.responseCode === '2008600') {
+                userSession[userId].billerRefId = inquiryRes.billerRefId;
+                userSession[userId].customerNo = text;
+                userSession[userId].totalAmount = inquiryRes.totalAmount.value;
+                userSession[userId].productCode = productCode;
+
+                return ctx.reply(
+                    `✅ *TAGIHAN DITEMUKAN*\n` +
+                    `━━━━━━━━━━━━━━━━━━━\n` +
+                    `👤 Nama Pelanggan: *${inquiryRes.customerName}*\n` +
+                    `🔢 No Pelanggan: \`${inquiryRes.customerNo}\`\n` +
+                    `📄 Produk: ${productCode}\n` +
+                    `💰 Tagihan: Rp ${parseInt(inquiryRes.billAmount.value).toLocaleString('id-ID')}\n` +
+                    `📌 Admin Fee: Rp ${parseInt(inquiryRes.adminFee.value).toLocaleString('id-ID')}\n` +
+                    `💵 *Total Tagihan: Rp ${parseInt(inquiryRes.totalAmount.value).toLocaleString('id-ID')}*`,
+                    {
+                        parse_mode: 'Markdown',
+                        ...Markup.inlineKeyboard([
+                            [Markup.button.callback('💳 Bayar Tagihan Sekarang', 'pay_postpaid')],
+                            [Markup.button.callback('« Batalkan', 'back_home')]
+                        ])
+                    }
+                );
+            }
+            return ctx.reply(`⚠️ Gagal Inquiry: ${inquiryRes.responseMessage || 'Tagihan tidak ditemukan / sudah lunas.'}`);
+        } catch (err) {
+            console.error(err);
+            return ctx.reply('❌ Terjadi kesalahan koneksi server Inquiry Pascabayar.');
         }
-        return ctx.reply(`⚠️ Gagal membuat QRIS: ${res.responseMessage || 'Kesalahan sistem'}`);
-    } catch (err) {
-        console.error(err);
-        return ctx.reply('❌ Gagal terhubung ke server pembayaran BinderPay.');
+    }
+
+    // 4. Proses Cek Harga Produk Prabayar (Service 85)
+    if (!userSession[userId]) userSession[userId] = { category: 'pulsa' };
+    userSession[userId].targetNo = text;
+    const category = userSession[userId].category;
+
+    await ctx.reply(`⏳ Mengambil katalog harga ${category} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
+
+    try {
+        const priceRes = await binderPayClient.get(`/v1.0/bill-payment/prepaid/price?category=${category}&number=${text}`);
+
+        if (priceRes.responseCode === '2008500' && priceRes.data && priceRes.data.length > 0) {
+            userSession[userId].products = priceRes.data;
+
+            // Buat tombol daftar produk rapi
+            const buttons = priceRes.data.slice(0, 10).map(prod => [
+                Markup.button.callback(`${prod.productName} - Rp ${parseInt(prod.price.value).toLocaleString('id-ID')}`, `buy_pre_${prod.productCode}`)
+            ]);
+            buttons.push([Markup.button.callback('« Batalkan & Kembali', 'back_home')]);
+
+            return ctx.reply(
+                `📱 *KATALOG PRODUK PRABAYAR*\n` +
+                `Tujuan: \`${text}\`\n\n` +
+                `Silakan pilih produk yang diinginkan:`,
+                { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
+            );
+        }
+        return ctx.reply(`⚠️ Produk tidak ditemukan untuk kategori atau nomor tersebut.`);
+    } catch (e) {
+        console.error(e);
+        return ctx.reply('❌ Gagal mengambil daftar harga prabayar dari server.');
     }
 });
 
-// 2. Eksekusi Pembayaran Virtual Account (Service 27)
-bot.action(/pay_va_([^_]+)_(\d+)/, async (ctx) => {
-    const channel = ctx.match[1];
-    const amount = ctx.match[2];
-    const trxId = `INDOSAKU-VA-${Date.now()}`;
+// --- EKSEKUSI PEMBELIAN PRABAYAR (Service 88) ---
+bot.action(/buy_pre_(.+)/, async (ctx) => {
+    const productCode = ctx.match[1];
     const userId = ctx.from.id;
-    const customerNo = userSession[userId]?.targetNo || '08123456789';
+    const session = userSession[userId];
+
+    if (!session || !session.products) {
+        return ctx.reply('⚠️ Sesi telah kedaluwarsa. Silakan kirim /start untuk mengulang.');
+    }
+
+    const selectedProduct = session.products.find(p => p.productCode === productCode);
+    if (!selectedProduct) return ctx.reply('⚠️ Produk tidak valid.');
+
+    const trxId = `TRX-PRE-${Date.now()}`;
+    await ctx.reply(`⏳ Memproses pembelian *${selectedProduct.productName}* ke nomor \`${session.targetNo}\`...`, { parse_mode: 'Markdown' });
 
     try {
-        await ctx.reply(`⏳ Membuat Virtual Account ${channel}...`);
-        const res = await binderPayClient.virtualAccount.create({
-            customerNo: customerNo,
-            virtualAccountName: `INDOSAKU - ${ctx.from.first_name || 'User'}`,
+        const purchaseRes = await binderPayClient.post('POST', '/v1.0/bill-payment/prepaid/purchase', {
+            partnerServiceId: '88',
+            customerNo: session.targetNo,
+            productCode: productCode,
             trxId: trxId,
-            totalAmount: { value: `${amount}.00`, currency: 'IDR' },
-            virtualAccountTrxType: 'C',
-            additionalInfo: { channel: channel }
+            totalAmount: {
+                value: selectedProduct.price.value,
+                currency: 'IDR'
+            },
+            additionalInfo: {
+                category: session.category
+            }
         });
 
-        if (res.responseCode === '2002700') {
-            const va = res.virtualAccountData;
+        if (purchaseRes.responseCode === '2008800' && purchaseRes.status === 'SUCCESS') {
             return ctx.reply(
-                `✅ *VIRTUAL ACCOUNT ${channel} BERHASIL*\n` +
+                `✅ *TRANSAKSI PRABAYAR BERHASIL*\n` +
                 `━━━━━━━━━━━━━━━━━━━\n` +
-                `🔢 No. VA: \`${va.virtualAccountNo}\`\n` +
-                `👤 Atas Nama: ${va.virtualAccountName}\n` +
-                `💰 Total Tagihan: *Rp ${parseInt(amount).toLocaleString('id-ID')}*\n\n` +
-                `Silakan transfer ke nomor VA di atas. Status transaksi akan terverifikasi otomatis.`,
-                {
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([[Markup.button.callback('« Selesai / Menu Utama', 'back_home')]])
-                }
+                `📦 Produk: *${selectedProduct.productName}*\n` +
+                `🎯 Tujuan: \`${purchaseRes.customerNo}\`\n` +
+                `🆔 TRX ID: \`${purchaseRes.trxId}\`\n` +
+                `🔢 SN / Token PLN: \`${purchaseRes.serialNumber || '-'}\`\n` +
+                `💰 Total Terpotong: Rp ${parseInt(purchaseRes.totalAmount.value).toLocaleString('id-ID')}`,
+                { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]]) }
             );
         }
-        return ctx.reply(`⚠️ Gagal membuat VA: ${res.responseMessage || 'Kesalahan sistem'}`);
+        return ctx.reply(`⚠️ Transaksi Gagal / Pending: ${purchaseRes.responseMessage || 'Periksa saldo akun merchant Anda.'}`);
     } catch (err) {
         console.error(err);
-        return ctx.reply('❌ Terjadi kesalahan koneksi VA BinderPay.');
+        return ctx.reply('❌ Terjadi kesalahan koneksi saat pembelian prabayar.');
+    }
+});
+
+// --- EKSEKUSI PEMBAYARAN PASCABAYAR (Service 87) ---
+bot.action('pay_postpaid', async (ctx) => {
+    const userId = ctx.from.id;
+    const session = userSession[userId];
+
+    if (!session || !session.billerRefId) {
+        return ctx.reply('⚠️ Data tagihan tidak ditemukan. Silakan ulangi proses dari awal.');
+    }
+
+    const trxId = `PAY-POS-${Date.now()}`;
+    await ctx.reply(`⏳ Memproses pembayaran tagihan pascabayar...`);
+
+    try {
+        const payRes = await binderPayClient.post('POST', '/v1.0/bill-payment/payment', {
+            partnerServiceId: '87',
+            trxId: trxId,
+            billerRefId: session.billerRefId,
+            customerNo: session.customerNo,
+            productCode: session.productCode,
+            totalAmount: {
+                value: session.totalAmount,
+                currency: 'IDR'
+            },
+            additionalInfo: {}
+        });
+
+        if (payRes.responseCode === '2008700' && payRes.status === 'SUCCESS') {
+            return ctx.reply(
+                `✅ *PEMBAYARAN PASCABAYAR BERHASIL*\n` +
+                `━━━━━━━━━━━━━━━━━━━\n` +
+                `👤 Nama: ${payRes.customerName}\n` +
+                `📄 Produk: ${payRes.productCode}\n` +
+                `🔢 No Pelanggan: \`${payRes.customerNo}\`\n` +
+                `🆔 TRX ID: \`${payRes.trxId}\`\n` +
+                `🧾 No. SN / Ref: \`${payRes.serialNumber}\`\n` +
+                `💰 Total Lunas: Rp ${parseInt(payRes.totalAmount.value).toLocaleString('id-ID')}`,
+                { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]]) }
+            );
+        }
+        return ctx.reply(`⚠️ Pembayaran Gagal: ${payRes.responseMessage}`);
+    } catch (e) {
+        console.error(e);
+        return ctx.reply('❌ Gagal mengeksekusi pembayaran tagihan pascabayar.');
     }
 });
 
@@ -314,7 +364,7 @@ module.exports = async (req, res) => {
             await bot.handleUpdate(req.body);
             return res.status(200).send('OK');
         }
-        return res.status(200).send('Bot Telegram INDOSAKU PPOB Aktif & Berjalan di Vercel!');
+        return res.status(200).send('Bot Telegram INDOSAKU PPOB SNAP Full Features Berjalan di Vercel!');
     } catch (error) {
         console.error('Webhook Error:', error);
         return res.status(500).send('Internal Server Error');
