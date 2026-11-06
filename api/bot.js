@@ -1,14 +1,67 @@
 const { Telegraf, Markup } = require('telegraf');
 const { BinderPay } = require('binderpay-nodejs');
+const axios = require('axios');
+const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+const PARTNER_ID = process.env.BINDERPAY_PARTNER_ID || 'BP984265';
+const PRIVATE_KEY = (process.env.BINDERPAY_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
+const IS_PRODUCTION = true; // Ubah ke false jika menggunakan sandbox
+
 const binderPayClient = new BinderPay({
-    partnerId: process.env.BINDERPAY_PARTNER_ID || 'BP984265',
-    privateKey: (process.env.BINDERPAY_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim(),
+    partnerId: PARTNER_ID,
+    privateKey: PRIVATE_KEY,
     channelId: 'BCA',
-    isProduction: true
+    isProduction: IS_PRODUCTION
 });
+
+// Helper untuk membuat Signature SNAP Standard secara manual & aman
+const generateSnapHeaders = (method, endpoint, accessToken = '') => {
+    const timestamp = new Date().toISOString().replace(/\.\d+Z$/, '+07:00');
+    const externalId = crypto.randomUUID();
+    
+    // Signature string sederhana untuk SNAP BI
+    // Format: PartnerID|Timestamp|ExternalID
+    const stringToSign = `${PARTNER_ID}|${timestamp}|${externalId}`;
+    
+    let signature = '';
+    try {
+        const sign = crypto.createSign('RSA-SHA256');
+        sign.update(stringToSign);
+        sign.end();
+        signature = sign.sign(PRIVATE_KEY, 'base64');
+    } catch (e) {
+        console.error('Signature Error:', e);
+    }
+
+    const host = IS_PRODUCTION ? 'api.binderpay.id' : 'api-sandbox.binderpay.id';
+
+    return {
+        'Content-Type': 'application/json',
+        'X-Timestamp': timestamp,
+        'X-Partner-ID': PARTNER_ID,
+        'X-External-ID': externalId,
+        'X-Signature': signature,
+        'Channel-ID': 'PPOB',
+        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+    };
+};
+
+// Fungsi aman untuk request Cek Harga Prabayar (Service 85)
+const fetchPrepaidPrice = async (category, number) => {
+    try {
+        const host = IS_PRODUCTION ? 'https://api.binderpay.id' : 'https://api-sandbox.binderpay.id';
+        const endpoint = `/v1.0/bill-payment/prepaid/price?category=${category}&number=${number}`;
+        const headers = generateSnapHeaders('GET', endpoint);
+
+        const response = await axios.get(`${host}${endpoint}`, { headers });
+        return response.data;
+    } catch (error) {
+        console.error('API Price Error:', error.response?.data || error.message);
+        return error.response?.data || { responseCode: '500', responseMessage: error.message };
+    }
+};
 
 const INDOSAKU_LOGO_URL = 'https://ibb.co.com/1G94Bcm9';
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789'; 
@@ -107,7 +160,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
     const userId = ctx.from.id;
     userSession[userId] = { category };
 
-    // 1. Sub-menu E-Wallet
     if (category === 'ewallet') {
         userSession[userId].mode = 'sub_select';
         return ctx.reply(
@@ -126,7 +178,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
         );
     }
 
-    // 2. Sub-menu Voucher Game
     if (category === 'game') {
         userSession[userId].mode = 'sub_select';
         return ctx.reply(
@@ -145,7 +196,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
         );
     }
 
-    // 3. Sub-menu Voucher Digital
     if (category === 'voucher') {
         userSession[userId].mode = 'sub_select';
         return ctx.reply(
@@ -163,7 +213,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
         );
     }
 
-    // 4. Sub-menu E-Toll / E-Money
     if (category === 'etoll') {
         userSession[userId].mode = 'sub_select';
         return ctx.reply(
@@ -182,7 +231,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
         );
     }
 
-    // 5. Sub-menu Pascabayar
     if (category === 'pascabayar') {
         userSession[userId].mode = 'postpaid_select';
         return ctx.reply(
@@ -276,7 +324,6 @@ bot.on('text', async (ctx, next) => {
 
     const userId = ctx.from.id.toString();
 
-    // 1. Admin Membalas Live Chat
     if (userId === ADMIN_TELEGRAM_ID.toString() && ctx.message.reply_to_message) {
         const repliedText = ctx.message.reply_to_message.text || '';
         const matchId = repliedText.match(/ID User:\s*`(\d+)`/) || repliedText.match(/Dari:\s*`(\d+)`/);
@@ -291,7 +338,6 @@ bot.on('text', async (ctx, next) => {
         }
     }
 
-    // 2. Mode Live Chat Pengguna Aktif
     if (userSession[userId] && userSession[userId].mode === 'live_chat') {
         try {
             await bot.telegram.sendMessage(
@@ -305,7 +351,7 @@ bot.on('text', async (ctx, next) => {
         }
     }
 
-    // 3. Proses Inquiry Pascabayar (Service 86)
+    // Proses Inquiry Pascabayar (Service 86)
     if (userSession[userId] && userSession[userId].mode === 'waiting_postpaid_customer') {
         const productCode = userSession[userId].productCode;
         const trxId = `INQ-POS-${Date.now()}`;
@@ -352,29 +398,28 @@ bot.on('text', async (ctx, next) => {
         }
     }
 
-    // 4. Proses Cek Harga Produk Prabayar (Service 85)
+    // Proses Cek Harga Produk Prabayar (Service 85)
     if (!userSession[userId]) userSession[userId] = { category: 'pulsa' };
     userSession[userId].targetNo = text;
     let category = userSession[userId].category;
 
     let apiCategory = category;
     if (category === 'ewallet' || category === 'game' || category === 'voucher' || category === 'etoll') {
-        apiCategory = category; // Menggunakan kategori binderpay yang sesuai
+        apiCategory = category;
     }
     if (category === 'listrik') apiCategory = 'pln';
 
     let providerInfo = '';
+    let subLabel = userSession[userId].subType ? ` (${userSession[userId].subType})` : '';
     if (category === 'pulsa' || category === 'data') {
         const detectedOp = detectOperator(text);
         providerInfo = `🔍 *Provider Terdeteksi:* ${detectedOp}\n`;
     }
 
-    const subTitleLabel = userSession[userId].subType ? ` (${userSession[userId].subType})` : '';
-    await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category}${subTitleLabel} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
+    await ctx.reply(`⏳ ${providerInfo}Mengambil katalog harga ${category}${subLabel} untuk tujuan \`${text}\`...`, { parse_mode: 'Markdown' });
 
     try {
-        const endpoint = `/v1.0/bill-payment/prepaid/price?category=${apiCategory}&number=${text}`;
-        const priceRes = await binderPayClient.get(endpoint);
+        const priceRes = await fetchPrepaidPrice(apiCategory, text);
 
         if (priceRes && priceRes.responseCode === '2008500' && priceRes.data && priceRes.data.length > 0) {
             userSession[userId].products = priceRes.data;
@@ -395,7 +440,7 @@ bot.on('text', async (ctx, next) => {
         return ctx.reply(`⚠️ Produk tidak tersedia atau nomor/ID tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
     } catch (e) {
         console.error('BinderPay Price Error:', e);
-        return ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau saldo/akses Partner ID Anda.');
+        return ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau Partner ID Anda.');
     }
 });
 
