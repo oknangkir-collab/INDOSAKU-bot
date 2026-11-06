@@ -15,7 +15,7 @@ const binderPayClient = new BinderPay({
     isProduction: IS_PRODUCTION
 });
 
-// Helper untuk Signature SNAP Standard
+// Helper untuk Signature SNAP Standard dengan X-SIGNATURE lengkap
 const generateSnapHeaders = (method, endpoint) => {
     const timestamp = new Date().toISOString().replace(/\.\d+Z$/, '+07:00');
     const externalId = crypto.randomUUID();
@@ -40,7 +40,8 @@ const generateSnapHeaders = (method, endpoint) => {
         'X-Partner-ID': PARTNER_ID,
         'X-External-ID': externalId,
         'X-Signature': signature,
-        'Channel-ID': 'PPOB'
+        'Channel-ID': 'PPOB',
+        'Authorization': 'Bearer dummy_token'
     };
 };
 
