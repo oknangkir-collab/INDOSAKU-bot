@@ -7,7 +7,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 const PARTNER_ID = process.env.BINDERPAY_PARTNER_ID || 'BP984265';
 const PRIVATE_KEY = (process.env.BINDERPAY_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
-const IS_PRODUCTION = true; // Ubah ke false jika menggunakan sandbox
+const IS_PRODUCTION = true;
 
 const binderPayClient = new BinderPay({
     partnerId: PARTNER_ID,
@@ -16,26 +16,24 @@ const binderPayClient = new BinderPay({
     isProduction: IS_PRODUCTION
 });
 
-// Helper untuk membuat Signature SNAP Standard secara manual & aman
+// Helper untuk Signature SNAP Standard
 const generateSnapHeaders = (method, endpoint, accessToken = '') => {
     const timestamp = new Date().toISOString().replace(/\.\d+Z$/, '+07:00');
     const externalId = crypto.randomUUID();
-    
-    // Signature string sederhana untuk SNAP BI
-    // Format: PartnerID|Timestamp|ExternalID
     const stringToSign = `${PARTNER_ID}|${timestamp}|${externalId}`;
     
     let signature = '';
     try {
-        const sign = crypto.createSign('RSA-SHA256');
+        const sign = crypto.createSign('SHA256');
         sign.update(stringToSign);
         sign.end();
-        signature = sign.sign(PRIVATE_KEY, 'base64');
+        signature = sign.sign({
+            key: PRIVATE_KEY,
+            padding: crypto.constants.RSA_PKCS1_PADDING
+        }, 'base64');
     } catch (e) {
-        console.error('Signature Error:', e);
+        console.error('Signature Generation Error:', e);
     }
-
-    const host = IS_PRODUCTION ? 'api.binderpay.id' : 'api-sandbox.binderpay.id';
 
     return {
         'Content-Type': 'application/json',
@@ -48,7 +46,6 @@ const generateSnapHeaders = (method, endpoint, accessToken = '') => {
     };
 };
 
-// Fungsi aman untuk request Cek Harga Prabayar (Service 85)
 const fetchPrepaidPrice = async (category, number) => {
     try {
         const host = IS_PRODUCTION ? 'https://api.binderpay.id' : 'https://api-sandbox.binderpay.id';
@@ -68,7 +65,6 @@ const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789';
 
 const userSession = {};
 
-// Helper untuk deteksi operator seluler dari nomor HP
 const detectOperator = (phone) => {
     let cleanNo = phone.replace(/[^0-9]/g, '');
     if (cleanNo.startsWith('62')) cleanNo = '0' + cleanNo.slice(2);
@@ -121,28 +117,27 @@ const showMainMenu = async (ctx) => {
     ]);
 
     try {
-        return ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
+        return await ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
     } catch (e) {
-        return ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
+        return await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
     }
 };
 
-bot.start((ctx) => {
+bot.start(async (ctx) => {
     delete userSession[ctx.from.id];
-    return showMainMenu(ctx);
+    return await showMainMenu(ctx);
 });
 
-bot.action('back_home', (ctx) => {
+bot.action('back_home', async (ctx) => {
     delete userSession[ctx.from.id];
-    return ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
+    return await ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
 });
 
-// --- LIVE CHAT ADMIN VIA BOT ---
-bot.action('start_live_chat', (ctx) => {
+bot.action('start_live_chat', async (ctx) => {
     const userId = ctx.from.id;
     userSession[userId] = { mode: 'live_chat' };
 
-    return ctx.reply(
+    return await ctx.reply(
         `💬 *LIVE CHAT DENGAN ADMIN INDOSAKU*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan ketik pesan atau kendala transaksi Anda di chat ini. Admin akan segera merespons.\n\n` +
@@ -154,7 +149,6 @@ bot.action('start_live_chat', (ctx) => {
     );
 });
 
-// --- PILIH KATEGORI UTAMA & SUB-MENU SPESIFIK ---
 bot.action(/cat_(.+)/, async (ctx) => {
     const category = ctx.match[1];
     const userId = ctx.from.id;
@@ -162,7 +156,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     if (category === 'ewallet') {
         userSession[userId].mode = 'sub_select';
-        return ctx.reply(
+        return await ctx.reply(
             `💳 *PILIH PROVIDER E-WALLET*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih dompet digital tujuan Anda:`,
@@ -180,7 +174,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     if (category === 'game') {
         userSession[userId].mode = 'sub_select';
-        return ctx.reply(
+        return await ctx.reply(
             `🎮 *PILIH VOUCHER GAME*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih game favorit Anda:`,
@@ -198,7 +192,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     if (category === 'voucher') {
         userSession[userId].mode = 'sub_select';
-        return ctx.reply(
+        return await ctx.reply(
             `🎫 *PILIH VOUCHER DIGITAL*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih jenis voucher digital:`,
@@ -215,7 +209,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     if (category === 'etoll') {
         userSession[userId].mode = 'sub_select';
-        return ctx.reply(
+        return await ctx.reply(
             `🚗 *PILIH KARTU E-TOLL / E-MONEY*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih jenis kartu emoney Anda:`,
@@ -233,7 +227,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     if (category === 'pascabayar') {
         userSession[userId].mode = 'postpaid_select';
-        return ctx.reply(
+        return await ctx.reply(
             `📄 *PILIH KATEGORI PASCABAYAR*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih jenis tagihan pascabayar:`,
@@ -260,7 +254,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
 
     userSession[userId].mode = 'waiting_target';
 
-    return ctx.reply(
+    return await ctx.reply(
         `📂 *${title}*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan kirim *${placeholder}* Anda ke chat ini:`,
@@ -271,8 +265,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
     );
 });
 
-// Pilih Sub-Menu Spesifik (E-Wallet, Game, Voucher, E-Toll)
-bot.action(/sub_(.+)/, (ctx) => {
+bot.action(/sub_(.+)/, async (ctx) => {
     const subType = ctx.match[1];
     const userId = ctx.from.id;
     if (!userSession[userId]) userSession[userId] = {};
@@ -281,15 +274,13 @@ bot.action(/sub_(.+)/, (ctx) => {
     userSession[userId].mode = 'waiting_target';
 
     let placeholder = 'Nomor Tujuan / ID Pelanggan';
-    if (subType === 'ML' || subType === 'FF' || subType === 'PUBG' || subType === 'VALORANT' || subType === 'DOMINO' || subType === 'GENSHIN') {
+    if (['ML', 'FF', 'PUBG', 'VALORANT', 'DOMINO', 'GENSHIN'].includes(subType)) {
         placeholder = 'User ID & Server ID (Contoh: 12345678(1234))';
     } else if (['DANA', 'OVO', 'GOPAY', 'SHOPEEPAY', 'LINKAJA'].includes(subType)) {
         placeholder = `Nomor HP Akun ${subType} (Contoh: 08123456789)`;
-    } else if (subType.startsWith('ETOH_') || subType === 'GOOGLEPLAY' || subType === 'STEAM') {
-        placeholder = 'Nomor Kartu / ID Voucher / Nomor HP';
     }
 
-    return ctx.reply(
+    return await ctx.reply(
         `🎯 *LAYANAN: ${subType.replace('_', ' ')}*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan kirim *${placeholder}* Anda ke chat ini:`,
@@ -297,8 +288,7 @@ bot.action(/sub_(.+)/, (ctx) => {
     );
 });
 
-// Pilih Product Code Pascabayar
-bot.action(/postcode_(.+)/, (ctx) => {
+bot.action(/postcode_(.+)/, async (ctx) => {
     const productCode = ctx.match[1];
     const userId = ctx.from.id;
     if (!userSession[userId]) userSession[userId] = {};
@@ -306,7 +296,7 @@ bot.action(/postcode_(.+)/, (ctx) => {
     userSession[userId].productCode = productCode;
     userSession[userId].mode = 'waiting_postpaid_customer';
 
-    return ctx.reply(
+    return await ctx.reply(
         `📄 *INQUIRY PASCABAYAR (${productCode})*\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Silakan kirim *Nomor Pelanggan / ID Tagihan* Anda:`,
@@ -314,12 +304,11 @@ bot.action(/postcode_(.+)/, (ctx) => {
     );
 });
 
-// --- MENANGANI PESAN TEKS MASUK ---
-bot.on('text', async (ctx, next) => {
+bot.on('text', async (ctx) => {
     const text = ctx.message.text.trim();
     if (text === '/start') {
         delete userSession[ctx.from.id];
-        return showMainMenu(ctx);
+        return await showMainMenu(ctx);
     }
 
     const userId = ctx.from.id.toString();
@@ -331,9 +320,9 @@ bot.on('text', async (ctx, next) => {
             const targetUser = matchId[1];
             try {
                 await bot.telegram.sendMessage(targetUser, `💬 *Pesan dari Admin INDOSAKU:*\n\n${text}`, { parse_mode: 'Markdown' });
-                return ctx.reply('✅ Balasan terkirim ke user.');
+                return await ctx.reply('✅ Balasan terkirim ke user.');
             } catch (err) {
-                return ctx.reply('❌ Gagal mengirim pesan.');
+                return await ctx.reply('❌ Gagal mengirim pesan.');
             }
         }
     }
@@ -345,13 +334,12 @@ bot.on('text', async (ctx, next) => {
                 `🔔 *LIVE CHAT MASUK*\n👤 ${ctx.from.first_name} (\`${userId}\`)\n\n💬 ${text}`,
                 { parse_mode: 'Markdown' }
             );
-            return ctx.reply('💬 Pesan diteruskan ke Admin. Mohon tunggu balasan!');
+            return await ctx.reply('💬 Pesan diteruskan ke Admin. Mohon tunggu balasan!');
         } catch (e) {
-            return ctx.reply('❌ Gagal mengirim pesan live chat.');
+            return await ctx.reply('❌ Gagal mengirim pesan live chat.');
         }
     }
 
-    // Proses Inquiry Pascabayar (Service 86)
     if (userSession[userId] && userSession[userId].mode === 'waiting_postpaid_customer') {
         const productCode = userSession[userId].productCode;
         const trxId = `INQ-POS-${Date.now()}`;
@@ -367,13 +355,13 @@ bot.on('text', async (ctx, next) => {
                 additionalInfo: {}
             });
 
-            if (inquiryRes.responseCode === '2008600') {
+            if (inquiryRes && inquiryRes.responseCode === '2008600') {
                 userSession[userId].billerRefId = inquiryRes.billerRefId;
                 userSession[userId].customerNo = text;
                 userSession[userId].totalAmount = inquiryRes.totalAmount.value;
                 userSession[userId].productCode = productCode;
 
-                return ctx.reply(
+                return await ctx.reply(
                     `✅ *TAGIHAN DITEMUKAN*\n` +
                     `━━━━━━━━━━━━━━━━━━━\n` +
                     `👤 Nama Pelanggan: *${inquiryRes.customerName}*\n` +
@@ -391,22 +379,19 @@ bot.on('text', async (ctx, next) => {
                     }
                 );
             }
-            return ctx.reply(`⚠️ Gagal Inquiry: ${inquiryRes.responseMessage || 'Tagihan tidak ditemukan / sudah lunas.'}`);
+            return await ctx.reply(`⚠️ Gagal Inquiry: ${inquiryRes?.responseMessage || 'Tagihan tidak ditemukan / sudah lunas.'}`);
         } catch (err) {
             console.error(err);
-            return ctx.reply('❌ Terjadi kesalahan koneksi server Inquiry Pascabayar.');
+            return await ctx.reply('❌ Terjadi kesalahan koneksi server Inquiry Pascabayar.');
         }
     }
 
-    // Proses Cek Harga Produk Prabayar (Service 85)
     if (!userSession[userId]) userSession[userId] = { category: 'pulsa' };
     userSession[userId].targetNo = text;
     let category = userSession[userId].category;
 
     let apiCategory = category;
-    if (category === 'ewallet' || category === 'game' || category === 'voucher' || category === 'etoll') {
-        apiCategory = category;
-    }
+    if (['ewallet', 'game', 'voucher', 'etoll'].includes(category)) apiCategory = category;
     if (category === 'listrik') apiCategory = 'pln';
 
     let providerInfo = '';
@@ -429,7 +414,7 @@ bot.on('text', async (ctx, next) => {
             ]);
             buttons.push([Markup.button.callback('« Batalkan & Kembali', 'back_home')]);
 
-            return ctx.reply(
+            return await ctx.reply(
                 `📱 *KATALOG PRODUK PRABAYAR*\n` +
                 `${providerInfo}` +
                 `🎯 Tujuan: \`${text}\`\n\n` +
@@ -437,25 +422,24 @@ bot.on('text', async (ctx, next) => {
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
             );
         }
-        return ctx.reply(`⚠️ Produk tidak tersedia atau nomor/ID tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
+        return await ctx.reply(`⚠️ Produk tidak tersedia atau nomor/ID tidak valid untuk kategori ini. (Respon: ${priceRes?.responseMessage || 'Kosong'})`);
     } catch (e) {
         console.error('BinderPay Price Error:', e);
-        return ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau Partner ID Anda.');
+        return await ctx.reply('❌ Gagal terhubung ke server BinderPay. Periksa kembali konfigurasi Private Key atau Partner ID Anda.');
     }
 });
 
-// --- EKSEKUSI PEMBELIAN PRABAYAR (Service 88) ---
 bot.action(/buy_pre_(.+)/, async (ctx) => {
     const productCode = ctx.match[1];
     const userId = ctx.from.id;
     const session = userSession[userId];
 
     if (!session || !session.products) {
-        return ctx.reply('⚠️ Sesi telah kedaluwarsa. Silakan kirim /start untuk mengulang.');
+        return await ctx.reply('⚠️ Sesi telah kedaluwarsa. Silakan kirim /start untuk mengulang.');
     }
 
     const selectedProduct = session.products.find(p => p.productCode === productCode);
-    if (!selectedProduct) return ctx.reply('⚠️ Produk tidak valid.');
+    if (!selectedProduct) return await ctx.reply('⚠️ Produk tidak valid.');
 
     const trxId = `TRX-PRE-${Date.now()}`;
     await ctx.reply(`⏳ Memproses pembelian *${selectedProduct.productName}* ke tujuan \`${session.targetNo}\`...`, { parse_mode: 'Markdown' });
@@ -476,8 +460,8 @@ bot.action(/buy_pre_(.+)/, async (ctx) => {
             }
         });
 
-        if (purchaseRes.responseCode === '2008800' && purchaseRes.status === 'SUCCESS') {
-            return ctx.reply(
+        if (purchaseRes && purchaseRes.responseCode === '2008800' && purchaseRes.status === 'SUCCESS') {
+            return await ctx.reply(
                 `✅ *TRANSAKSI PRABAYAR BERHASIL*\n` +
                 `━━━━━━━━━━━━━━━━━━━\n` +
                 `📦 Produk: *${selectedProduct.productName}*\n` +
@@ -488,20 +472,19 @@ bot.action(/buy_pre_(.+)/, async (ctx) => {
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]]) }
             );
         }
-        return ctx.reply(`⚠️ Transaksi Gagal / Pending: ${purchaseRes.responseMessage || 'Periksa saldo akun merchant Anda.'}`);
+        return await ctx.reply(`⚠️ Transaksi Gagal / Pending: ${purchaseRes?.responseMessage || 'Periksa saldo akun merchant Anda.'}`);
     } catch (err) {
         console.error(err);
-        return ctx.reply('❌ Terjadi kesalahan koneksi saat pembelian prabayar.');
+        return await ctx.reply('❌ Terjadi kesalahan koneksi saat pembelian prabayar.');
     }
 });
 
-// --- EKSEKUSI PEMBAYARAN PASCABAYAR (Service 87) ---
 bot.action('pay_postpaid', async (ctx) => {
     const userId = ctx.from.id;
     const session = userSession[userId];
 
     if (!session || !session.billerRefId) {
-        return ctx.reply('⚠️ Data tagihan tidak ditemukan. Silakan ulangi proses dari awal.');
+        return await ctx.reply('⚠️ Data tagihan tidak ditemukan. Silakan ulangi proses dari awal.');
     }
 
     const trxId = `PAY-POS-${Date.now()}`;
@@ -521,8 +504,8 @@ bot.action('pay_postpaid', async (ctx) => {
             additionalInfo: {}
         });
 
-        if (payRes.responseCode === '2008700' && payRes.status === 'SUCCESS') {
-            return ctx.reply(
+        if (payRes && payRes.responseCode === '2008700' && payRes.status === 'SUCCESS') {
+            return await ctx.reply(
                 `✅ *PEMBAYARAN PASCABAYAR BERHASIL*\n` +
                 `━━━━━━━━━━━━━━━━━━━\n` +
                 `👤 Nama: ${payRes.customerName}\n` +
@@ -534,10 +517,10 @@ bot.action('pay_postpaid', async (ctx) => {
                 { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]]) }
             );
         }
-        return ctx.reply(`⚠️ Pembayaran Gagal: ${payRes.responseMessage}`);
+        return await ctx.reply(`⚠️ Pembayaran Gagal: ${payRes?.responseMessage}`);
     } catch (e) {
         console.error(e);
-        return ctx.reply('❌ Gagal mengeksekusi pembayaran tagihan pascabayar.');
+        return await ctx.reply('❌ Gagal mengeksekusi pembayaran tagihan pascabayar.');
     }
 });
 
@@ -547,9 +530,9 @@ module.exports = async (req, res) => {
             await bot.handleUpdate(req.body);
             return res.status(200).send('OK');
         }
-        return res.status(200).send('Bot Telegram INDOSAKU PPOB SNAP Full Sub-Menu Berjalan di Vercel!');
+        return res.status(200).send('Bot Telegram INDOSAKU PPOB Aktif & Berjalan di Vercel!');
     } catch (error) {
         console.error('Webhook Error:', error);
-        return res.status(500).send('Internal Server Error');
+        return res.status(200).send('OK'); // Selalu kembalikan 200 OK agar Telegram tidak spamming retry
     }
 };
