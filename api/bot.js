@@ -8,7 +8,7 @@ const MERCHANT_ID = process.env.TOPUP_MERCHANT_ID || "MID9B4963992206";
 const API_KEY = process.env.TOPUP_API_KEY || "79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec";
 
 const INDOSAKU_LOGO_URL = 'https://ibb.co.com/1G94Bcm9';
-const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '123456789'; 
+const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '8559448151'; // Ganti ID Telegram admin Anda jika perlu
 
 const userSession = {};
 
@@ -32,28 +32,38 @@ const topupRequest = async (endpoint, payload = {}, extraHeaders = {}) => {
     }
 };
 
-// Menu Utama Bot
+// Menu Utama Bot (Disesuaikan berdasarkan hak akses Admin / User)
 const showMainMenu = async (ctx) => {
+    const userId = ctx.from.id.toString();
+    const isAdmin = (userId === ADMIN_TELEGRAM_ID.toString());
     const userName = ctx.from.first_name || 'Sobat INDOSAKU';
-    const text = 
+    
+    let text = 
         `⚡ *INDOSAKU DIGITAL & PPOB* ⚡\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Halo *${userName}*! Terhubung ke Server Topupku.com.\n\n` +
         `💡 *Silakan pilih menu di bawah ini:*`;
-    
-    const keyboard = Markup.inlineKeyboard([
+
+    // Tombol dasar untuk semua user
+    let keyboardRows = [
         [
             Markup.button.callback('📱 Pulsa & Data', 'cat_Pulsa'),
             Markup.button.callback('💳 TopUp E-Wallet', 'cat_E-Wallet')
         ],
         [
             Markup.button.callback('🎮 Voucher Game', 'cat_Game'),
-            Markup.button.callback('💰 Cek Saldo Merchant', 'check_balance')
-        ],
-        [
             Markup.button.callback('💬 Live Chat dengan Admin', 'start_live_chat')
         ]
-    ]);
+    ];
+
+    // Jika yang buka adalah Admin, tambahkan tombol khusus Cek Saldo
+    if (isAdmin) {
+        keyboardRows.push([
+            Markup.button.callback('💰 [ADMIN] Cek Saldo Merchant', 'check_balance')
+        ]);
+    }
+    
+    const keyboard = Markup.inlineKeyboard(keyboardRows);
 
     try {
         return await ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
@@ -69,25 +79,30 @@ bot.start(async (ctx) => {
 
 bot.action('back_home', async (ctx) => {
     delete userSession[ctx.from.id];
-    return await ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
+    return await showMainMenu(ctx);
 });
 
-// Cek Saldo / Profil Merchant via Topupku API
+// Cek Saldo / Profil Merchant (Hanya untuk Admin)
 bot.action('check_balance', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (userId !== ADMIN_TELEGRAM_ID.toString()) {
+        return await ctx.answerCbQuery('⚠️ Menu ini khusus untuk Admin!', { show_alert: true });
+    }
+
     await ctx.reply('⏳ Mengambil informasi saldo akun Topupku...');
     const res = await topupRequest('/api/profile');
     
     if (res && (res.success || res.data)) {
         const profile = res.data || res;
         return await ctx.reply(
-            `💰 *INFORMASI SALDO AKUN*\n` +
+            `💰 *INFORMASI SALDO AKUN (ADMIN)*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `👤 Nama: *${profile.name || MERCHANT_ID}*\n` +
             `💵 Sisa Saldo: *Rp ${parseInt(profile.balance || profile.sisa_saldo || 0).toLocaleString('id-ID')}*`,
             { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali ke Menu', 'back_home')]]) }
         );
     }
-    return await ctx.reply(`⚠️ Gagal mengambil saldo: ${res?.msg || 'Kesalahan koneksi API'}`);
+    return await ctx.reply(`⚠️ Gagal mengambil saldo: ${res?.msg || 'Kesalahan kredensial API / Akun nonaktif'}`);
 });
 
 bot.action('start_live_chat', async (ctx) => {
@@ -119,7 +134,6 @@ bot.action(/cat_(.+)/, async (ctx) => {
     if (res && res.data && res.data.length > 0) {
         userSession[userId].products = res.data;
 
-        // Buat tombol dari produk yang tersedia (maksimal 10 tombol pertama)
         const buttons = res.data.slice(0, 10).map(prod => [
             Markup.button.callback(`${prod.product_name || prod.name} - Rp ${parseInt(prod.price).toLocaleString('id-ID')}`, `buy_${prod.sku_code}`)
         ]);
@@ -136,7 +150,7 @@ bot.action(/cat_(.+)/, async (ctx) => {
     return await ctx.reply(`⚠️ Tidak ada produk ditemukan untuk kategori ini.`);
 });
 
-// Pilih Produk -> Minta Target ID (Nomor HP / User ID Game)
+// Pilih Produk -> Minta Target ID
 bot.action(/buy_(.+)/, async (ctx) => {
     const skuCode = ctx.match[1];
     const userId = ctx.from.id;
@@ -153,7 +167,7 @@ bot.action(/buy_(.+)/, async (ctx) => {
     );
 });
 
-// Handle Pesan Teks (Target ID, Live Chat, dll)
+// Handle Pesan Teks
 bot.on('text', async (ctx) => {
     const text = ctx.message.text.trim();
     if (text === '/start') {
@@ -199,7 +213,6 @@ bot.on('text', async (ctx) => {
 
         await ctx.reply(`⏳ Sedang memproses transaksi ke server Topupku (Reff ID: \`${reffId}\`)...`, { parse_mode: 'Markdown' });
 
-        // Buat Signature HMAC-SHA256 sesuai dokumentasi Topupku: MERCHANT_ID:reff_id
         const stringToSign = `${MERCHANT_ID}:${reffId}`;
         const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
@@ -234,20 +247,18 @@ bot.on('text', async (ctx) => {
     return await ctx.reply(`✅ Pesan diterima. Silakan ketik /start untuk mulai bertransaksi.`);
 });
 
-// Vercel Serverless Handler (Menangani Webhook Telegram & Callback Topupku)
+// Vercel Serverless Handler
 module.exports = async (req, res) => {
     try {
         if (req.method === 'POST') {
             const urlPath = req.url || '';
 
-            // Endpoint Callback / Webhook dari Topupku.com
             if (urlPath.includes('/callback') || urlPath.includes('/webhook')) {
                 const callbackData = req.body;
                 console.log('Topupku Callback Received:', callbackData);
                 return res.status(200).json({ success: true, message: 'Callback diterima' });
             }
 
-            // Default: Webhook Telegram Bot
             await bot.handleUpdate(req.body);
             return res.status(200).send('OK');
         }
