@@ -1,6 +1,5 @@
 const { Telegraf, Markup } = require('telegraf');
 const { BinderPay } = require('binderpay-nodejs');
-const axios = require('axios');
 const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -17,7 +16,7 @@ const binderPayClient = new BinderPay({
 });
 
 // Helper untuk Signature SNAP Standard
-const generateSnapHeaders = (method, endpoint, accessToken = '') => {
+const generateSnapHeaders = (method, endpoint) => {
     const timestamp = new Date().toISOString().replace(/\.\d+Z$/, '+07:00');
     const externalId = crypto.randomUUID();
     const stringToSign = `${PARTNER_ID}|${timestamp}|${externalId}`;
@@ -41,8 +40,7 @@ const generateSnapHeaders = (method, endpoint, accessToken = '') => {
         'X-Partner-ID': PARTNER_ID,
         'X-External-ID': externalId,
         'X-Signature': signature,
-        'Channel-ID': 'PPOB',
-        ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
+        'Channel-ID': 'PPOB'
     };
 };
 
@@ -52,11 +50,14 @@ const fetchPrepaidPrice = async (category, number) => {
         const endpoint = `/v1.0/bill-payment/prepaid/price?category=${category}&number=${number}`;
         const headers = generateSnapHeaders('GET', endpoint);
 
-        const response = await axios.get(`${host}${endpoint}`, { headers });
-        return response.data;
+        const response = await fetch(`${host}${endpoint}`, {
+            method: 'GET',
+            headers: headers
+        });
+        return await response.json();
     } catch (error) {
-        console.error('API Price Error:', error.response?.data || error.message);
-        return error.response?.data || { responseCode: '500', responseMessage: error.message };
+        console.error('API Price Error:', error.message);
+        return { responseCode: '500', responseMessage: error.message };
     }
 };
 
@@ -533,6 +534,6 @@ module.exports = async (req, res) => {
         return res.status(200).send('Bot Telegram INDOSAKU PPOB Aktif & Berjalan di Vercel!');
     } catch (error) {
         console.error('Webhook Error:', error);
-        return res.status(200).send('OK'); // Selalu kembalikan 200 OK agar Telegram tidak spamming retry
+        return res.status(200).send('OK');
     }
 };
