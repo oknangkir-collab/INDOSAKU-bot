@@ -3,265 +3,226 @@ const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-const TOPUP_BASE_URL = "https://topupku.com";
-const MERCHANT_ID = process.env.TOPUP_MERCHANT_ID || "MID9B4963992206";
-const API_KEY = process.env.TOPUP_API_KEY || "79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec";
+// Konfigurasi Kredensial Topupku
+const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
+const API_KEY = process.env.API_KEY || 'ISI_API_KEY_ANDA';
+const TOPUPKU_URL = 'https://api.topupku.com'; // Sesuaikan domain API Topupku
 
-const INDOSAKU_LOGO_URL = 'https://ibb.co.com/1G94Bcm9';
-const ADMIN_TELEGRAM_ID = '8559448151'; 
-
-const userSession = {};
-
-// Helper untuk Request ke Topupku API
-const topupRequest = async (endpoint, payload = {}, extraHeaders = {}) => {
+// Fungsi helper untuk melakukan request ke Topupku API
+async function topupRequest(endpoint, payload, headers = {}) {
     try {
-        const headers = {
-            "Authorization": `Bearer ${API_KEY}`,
-            "Content-Type": "application/json",
-            ...extraHeaders
-        };
-        const response = await fetch(`${TOPUP_BASE_URL}${endpoint}`, {
-            method: "POST",
-            headers: headers,
+        const response = await fetch(`${TOPUPKU_URL}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers
+            },
             body: JSON.stringify(payload)
         });
         return await response.json();
     } catch (error) {
-        console.error(`Topupku API Error (${endpoint}):`, error);
-        return { success: false, msg: error.message };
+        console.error('Topupku API Error:', error);
+        return { status: false, msg: error.message };
     }
-};
+}
 
-// Menu Utama Bot (Tombol Cek Saldo Khusus Admin)
-const showMainMenu = async (ctx) => {
-    const userId = ctx.from.id.toString();
-    const isAdmin = (userId === ADMIN_TELEGRAM_ID.toString());
-    const userName = ctx.from.first_name || 'Sobat INDOSAKU';
-    
-    const text = 
-        `⚡ *INDOSAKU DIGITAL & PPOB* ⚡\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `Halo *${userName}*! Terhubung ke Server Topupku.com.\n\n` +
-        `💡 *Silakan pilih menu di bawah ini:*`;
-
-    let keyboardRows = [
-        [
-            Markup.button.callback('📱 Pulsa & Data', 'cat_all'),
-            Markup.button.callback('💳 TopUp E-Wallet', 'cat_all')
-        ],
-        [
-            Markup.button.callback('🎮 Voucher Game', 'cat_all'),
-            Markup.button.callback('💬 Live Chat dengan Admin', 'start_live_chat')
-        ]
-    ];
-
-    if (isAdmin) {
-        keyboardRows.push([
-            Markup.button.callback('💰 [ADMIN] Cek Saldo Merchant', 'check_balance')
-        ]);
-    }
-    
-    const keyboard = Markup.inlineKeyboard(keyboardRows);
-
-    try {
-        return await ctx.replyWithPhoto(INDOSAKU_LOGO_URL, { caption: text, parse_mode: 'Markdown', ...keyboard });
-    } catch (e) {
-        return await ctx.reply(text, { parse_mode: 'Markdown', ...keyboard });
-    }
-};
-
-bot.start(async (ctx) => {
-    delete userSession[ctx.from.id];
-    return await showMainMenu(ctx);
-});
-
-bot.action('back_home', async (ctx) => {
-    delete userSession[ctx.from.id];
-    return await ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
-});
-
-// Cek Saldo / Profil Merchant (Khusus Admin)
-bot.action('check_balance', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (userId !== ADMIN_TELEGRAM_ID.toString()) {
-        return await ctx.answerCbQuery('⚠️ Menu ini khusus untuk Admin!', { show_alert: true });
-    }
-
-    await ctx.reply('⏳ Mengambil informasi saldo akun Topupku...');
-    const res = await topupRequest('/api/profile');
-    
-    if (res && (res.success || res.data)) {
-        const profile = res.data || res;
-        return await ctx.reply(
-            `💰 *INFORMASI SALDO AKUN (ADMIN)*\n` +
-            `━━━━━━━━━━━━━━━━━━━\n` +
-            `👤 Nama: *${profile.name || MERCHANT_ID}*\n` +
-            `💵 Sisa Saldo: *Rp ${parseInt(profile.balance || profile.sisa_saldo || 0).toLocaleString('id-ID')}*`,
-            { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali ke Menu', 'back_home')]]) }
-        );
-    }
-    return await ctx.reply(`⚠️ Gagal mengambil saldo: ${res?.msg || 'Kesalahan kredensial API / Akun nonaktif'}`);
-});
-
-bot.action('start_live_chat', async (ctx) => {
-    const userId = ctx.from.id;
-    userSession[userId] = { mode: 'live_chat' };
-
-    return await ctx.reply(
-        `💬 *LIVE CHAT DENGAN ADMIN INDOSAKU*\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `Silakan ketik pesan atau kendala transaksi Anda di chat ini.\n\n` +
-        `_Ketik /start jika ingin keluar dari mode live chat._`,
+// Handler Perintah /start
+bot.start((ctx) => {
+    return ctx.reply(
+        `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
+        `Silakan pilih menu transaksi atau buat tagihan pembayaran instan (Snap Deposit) melalui tombol di bawah:`,
         {
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'back_home')]])
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
+                [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
+            ])
         }
     );
 });
 
-// Ambil Semua Katalog Produk dari Topupku API
-bot.action(/cat_(.+)/, async (ctx) => {
-    const userId = ctx.from.id;
-    userSession[userId] = { category: 'all' };
+// Menu Pilihan Kanal Pembayaran Berdasarkan Referensi Postman
+bot.action('menu_channels', async (ctx) => {
+    await ctx.editMessageText(
+        `📌 *PILIH KANAL PEMBAYARAN*\n\n` +
+        `Silakan pilih kategori metode pembayaran yang diinginkan oleh pelanggan:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('📱 QRIS (SP / NQ)', 'pay_qris')],
+                [Markup.button.callback('👛 E-Wallet (DANA/OVO/Gopay)', 'pay_ewallet')],
+                [Markup.button.callback('🏦 Transfer Bank (BCA/BRI/Mandiri)', 'pay_bank')],
+                [Markup.button.callback('🏪 Ritel (Indomaret / Alfamart)', 'pay_retail')],
+                [Markup.button.callback('« Menu Utama', 'back_home')]
+            ])
+        }
+    );
+});
 
-    await ctx.reply(`⏳ Mengambil daftar produk dari server Topupku...`);
+// Sub-menu QRIS
+bot.action('pay_qris', async (ctx) => {
+    await ctx.editMessageText(
+        `📌 *PILIH KODE QRIS*\n\n` +
+        `• SP = QRIS Utama\n` +
+        `• NQ = QRIS Alternatif`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('Pilih SP (QRIS)', 'create_dep_SP')],
+            [Markup.button.callback('Pilih NQ (QRIS 2)', 'create_dep_NQ')],
+            [Markup.button.callback('« Kembali', 'menu_channels')]
+        ])
+    );
+});
 
-    const res = await topupRequest('/api/service', {});
+// Sub-menu E-Wallet
+bot.action('pay_ewallet', async (ctx) => {
+    await ctx.editMessageText(
+        `📌 *PILIH E-WALLET*\n\n` +
+        `• DA = DANA | OV = OVO\n` +
+        `• LA = LinkAja | SA/SHOPEEPAY = ShopeePay\n` +
+        `• GOPAY = GoPay | ASTRAPAY = AstraPay`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('DANA (DA)', 'create_dep_DA'), Markup.button.callback('OVO (OV)', 'create_dep_OV')],
+            [Markup.button.callback('ShopeePay (SA)', 'create_dep_SA'), Markup.button.callback('GoPay (GOPAY)', 'create_dep_GOPAY')],
+            [Markup.button.callback('« Kembali', 'menu_channels')]
+        ])
+    );
+});
 
-    if (res && res.data && res.data.length > 0) {
-        userSession[userId].products = res.data;
+// Sub-menu Bank
+bot.action('pay_bank', async (ctx) => {
+    await ctx.editMessageText(
+        `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n` +
+        `• BCAVA = BCA | M2 = Mandiri\n` +
+        `• BR = BRI | I1 = BNI | B1 = CIMB Niaga`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('BCA (BCAVA)', 'create_dep_BCAVA'), Markup.button.callback('Mandiri (M2)', 'create_dep_M2')],
+            [Markup.button.callback('BRI (BR)', 'create_dep_BR'), Markup.button.callback('CIMB (B1)', 'create_dep_B1')],
+            [Markup.button.callback('« Kembali', 'menu_channels')]
+        ])
+    );
+});
 
-        const buttons = res.data.slice(0, 10).map(prod => [
-            Markup.button.callback(`${prod.product_name || prod.name} - Rp ${parseInt(prod.price).toLocaleString('id-ID')}`, `buy_${prod.sku_code}`)
-        ]);
-        buttons.push([Markup.button.callback('« Batalkan & Kembali', 'back_home')]);
+// Sub-menu Retail
+bot.action('pay_retail', async (ctx) => {
+    await ctx.editMessageText(
+        `📌 *PILIH PEMBAYARAN RITEL*\n\n` +
+        `• INDOMARET = Indomaret\n` +
+        `• FT = Pegadaian / Alfamart / Pos`,
+        Markup.inlineKeyboard([
+            [Markup.button.callback('Indomaret', 'create_dep_INDOMARET'), Markup.button.callback('Alfamart/FT (FT)', 'create_dep_FT')],
+            [Markup.button.callback('« Kembali', 'menu_channels')]
+        ])
+    );
+});
 
-        return await ctx.reply(
-            `📦 *KATALOG PRODUK TERSEDIA*\n` +
-            `━━━━━━━━━━━━━━━━━━━\n` +
-            `Silakan pilih produk yang ingin dibeli:`,
-            { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
+// Aksi Eksekusi Pembuatan Deposit / Tagihan Berdasarkan Kode Bank yang Dipilih
+bot.action(/^create_dep_(.+)$/, async (ctx) => {
+    const kodeBank = ctx.match[1];
+    const reffId = `INDOSAKU-${Date.now().toString().slice(-8)}`;
+    const nominal = 10000; // Contoh nominal default, bisa disesuaikan
+
+    await ctx.editMessageText(`⏳ Sedang membuat tautan pembayaran untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
+
+    // Enkripsi Signature 2 lapis HMAC-SHA256
+    const stringToSign = `${MERCHANT_ID}:${reffId}`;
+    const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
+
+    // Request ke endpoint /api/deposit sesuai referensi cURL Postman
+    const response = await topupRequest('/api/deposit', {
+        reff_id: reffId,
+        kode_bank: kodeBank,
+        nominal: nominal.toString()
+    }, {
+        "Authorization": MERCHANT_ID,
+        "X-Order-Signature": signature
+    });
+
+    if (response && response.status) {
+        const data = response.data || {};
+        const paymentUrl = data.payment_url || data.checkout_url || `https://topupku.com/pay/${reffId}`;
+        
+        await ctx.reply(
+            `✅ *TAGIHAN PEMBAYARAN BERHASIL DIBUAT*\n\n` +
+            `🆔 Reff ID: \`${reffId}\`\n` +
+            `🏦 Kanal: \`${kodeBank}\`\n` +
+            `💰 Nominal: Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
+            `📊 Status: *Unpaid*\n\n` +
+            `Silakan klik tombol di bawah untuk menyelesaikan pembayaran:`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.url('🌐 Buka Link Pembayaran', paymentUrl)],
+                    [Markup.button.callback('« Menu Utama', 'back_home')]
+                ])
+            }
+        );
+    } else {
+        await ctx.reply(
+            `❌ *Gagal Membuat Tagihan*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'menu_channels')]])
+            }
         );
     }
-
-    return await ctx.reply(`⚠️ Tidak ada produk ditemukan. Pastikan status akun API Anda sudah aktif.`);
 });
 
-// Pilih Produk -> Minta Target ID
-bot.action(/buy_(.+)/, async (ctx) => {
-    const skuCode = ctx.match[1];
-    const userId = ctx.from.id;
-    if (!userSession[userId]) userSession[userId] = {};
-
-    userSession[userId].skuCode = skuCode;
-    userSession[userId].mode = 'waiting_target_id';
-
-    return await ctx.reply(
-        `🎯 *MASUKKAN TUJUAN TRANSAKSI*\n` +
-        `━━━━━━━━━━━━━━━━━━━\n` +
-        `Silakan kirim *Nomor HP / ID Tujuan* (misal: 08123456789 atau UserID Game) ke chat ini:`,
-        { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Batalkan', 'back_home')]]) }
+// Tombol Kembali ke Menu Utama
+bot.action('back_home', async (ctx) => {
+    return ctx.editMessageText(
+        `🤖 *PPOB INDOSAKU - MENU UTAMA*\n\nSilakan pilih menu transaksi di bawah:`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
+                [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
+            ])
+        }
     );
 });
 
-// Handle Pesan Teks
-bot.on('text', async (ctx) => {
-    const text = ctx.message.text.trim();
-    if (text === '/start') {
-        delete userSession[ctx.from.id];
-        return await showMainMenu(ctx);
-    }
+// Cek Profil / Status Akun
+bot.action('check_profile', async (ctx) => {
+    const reffId = `CHECK-${Date.now()}`;
+    const stringToSign = `${MERCHANT_ID}:${reffId}`;
+    const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
-    const userId = ctx.from.id.toString();
+    const res = await topupRequest('/api/profile', { reff_id: reffId }, {
+        "Authorization": MERCHANT_ID,
+        "X-Order-Signature": signature
+    });
 
-    if (userId === ADMIN_TELEGRAM_ID.toString() && ctx.message.reply_to_message) {
-        const repliedText = ctx.message.reply_to_message.text || '';
-        const matchId = repliedText.match(/ID User:\s*`(\d+)`/) || repliedText.match(/Dari:\s*`(\d+)`/);
-        if (matchId) {
-            const targetUser = matchId[1];
-            try {
-                await bot.telegram.sendMessage(targetUser, `💬 *Pesan dari Admin INDOSAKU:*\n\n${text}`, { parse_mode: 'Markdown' });
-                return await ctx.reply('✅ Balasan terkirim ke user.');
-            } catch (err) {
-                return await ctx.reply('❌ Gagal mengirim pesan.');
+    if (res && res.status) {
+        await ctx.editMessageText(
+            `✅ *STATUS AKUN AKTIF*\n\n` +
+            `👤 Nama: ${res.data?.name || 'Merchant INDOSAKU'}\n` +
+            `💰 Saldo: Rp ${(res.data?.balance || 0).toLocaleString('id-ID')}\n`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]])
             }
-        }
+        );
+    } else {
+        await ctx.editMessageText(
+            `❌ *Gagal Memuat Profil*\nPesan: ${res.msg || 'Status akun bermasalah.'}`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]])
+            }
+        );
     }
-
-    if (userSession[userId] && userSession[userId].mode === 'live_chat') {
-        try {
-            await bot.telegram.sendMessage(
-                ADMIN_TELEGRAM_ID,
-                `🔔 *LIVE CHAT MASUK*\n👤 ${ctx.from.first_name} (\`${userId}\`)\n\n💬 ${text}`,
-                { parse_mode: 'Markdown' }
-            );
-            return await ctx.reply('💬 Pesan diteruskan ke Admin. Mohon tunggu balasan!');
-        } catch (e) {
-            return await ctx.reply('❌ Gagal mengirim pesan live chat.');
-        }
-    }
-
-    // Eksekusi Order ke Topupku saat User Mengirim Target ID
-    if (userSession[userId] && userSession[userId].mode === 'waiting_target_id') {
-        const targetId = text;
-        const skuCode = userSession[userId].skuCode;
-        const reffId = `INDOSAKU-${Date.now()}`;
-
-        await ctx.reply(`⏳ Sedang memproses transaksi ke server Topupku (Reff ID: \`${reffId}\`)...`, { parse_mode: 'Markdown' });
-
-        const stringToSign = `${MERCHANT_ID}:${reffId}`;
-        const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
-
-        const orderRes = await topupRequest('/api/order', {
-            reff_id: reffId,
-            sku_code: skuCode,
-            target_id: targetId,
-            target_server: ""
-        }, {
-            "X-Order-Signature": signature
-        });
-
-        delete userSession[userId];
-
-        if (orderRes && (orderRes.success || orderRes.data)) {
-            const data = orderRes.data || orderRes;
-            return await ctx.reply(
-                `✅ *PESANAN BERHASIL DIPROSES*\n` +
-                `━━━━━━━━━━━━━━━━━━━\n` +
-                `📦 Produk: *${data.product_name || skuCode}*\n` +
-                `🎯 Tujuan: \`${targetId}\`\n` +
-                `🆔 Invoice: \`${data.invoice_number || '-'}\`\n` +
-                `📌 Status: *${data.status || 'Process / Success'}*\n` +
-                `💰 Harga: Rp ${parseInt(data.price || 0).toLocaleString('id-ID')}`,
-                { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('« Menu Utama', 'back_home')]]) }
-            );
-        }
-
-        return await ctx.reply(`❌ Transaksi Gagal: ${orderRes?.msg || 'Saldo tidak cukup atau SKU tidak valid.'}`);
-    }
-
-    return await ctx.reply(`✅ Pesan diterima. Silakan ketik /start untuk mulai bertransaksi.`);
 });
 
-// Vercel Serverless Handler
+// Ekspor handler serverless untuk Vercel (Webhook tunggal)
 module.exports = async (req, res) => {
     try {
         if (req.method === 'POST') {
-            const urlPath = req.url || '';
-
-            if (urlPath.includes('/callback') || urlPath.includes('/webhook')) {
-                const callbackData = req.body;
-                console.log('Topupku Callback Received:', callbackData);
-                return res.status(200).json({ success: true, message: 'Callback diterima' });
-            }
-
             await bot.handleUpdate(req.body);
-            return res.status(200).send('OK');
+            return res.status(200).json({ success: true });
         }
-
-        return res.status(200).send('Bot Telegram INDOSAKU & Topupku API Berjalan Normal di Vercel!');
-    } catch (error) {
-        console.error('Serverless Error:', error);
-        return res.status(200).send('OK');
+        return res.status(200).send('Bot PPOB INDOSAKU is running smoothly on Vercel!');
+    } catch (e) {
+        console.error('Webhook Error:', e);
+        return res.status(500).json({ error: e.message });
     }
 };
