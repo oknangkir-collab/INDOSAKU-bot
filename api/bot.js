@@ -6,9 +6,9 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Konfigurasi Kredensial Topupku
 const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
 const API_KEY = process.env.API_KEY || 'ISI_API_KEY_ANDA';
-const TOPUPKU_URL = 'https://api.topupku.com'; // Sesuaikan domain API Topupku
+const TOPUPKU_URL = process.env.TOPUPKU_DOMAIN || 'https://api.topupku.com';
 
-// Fungsi helper untuk melakukan request ke Topupku API
+// Fungsi helper aman untuk request ke Topupku API (Anti HTML/JSON Parse Error)
 async function topupRequest(endpoint, payload, headers = {}) {
     try {
         const response = await fetch(`${TOPUPKU_URL}${endpoint}`, {
@@ -19,7 +19,16 @@ async function topupRequest(endpoint, payload, headers = {}) {
             },
             body: JSON.stringify(payload)
         });
-        return await response.json();
+
+        const textResponse = await response.text();
+        
+        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare)
+        if (textResponse.trim().startsWith('<') || textResponse.includes('<!DOCTYPE')) {
+            console.error('HTML Error Response:', textResponse);
+            return { status: false, msg: 'Server Topupku mengembalikan halaman error (HTML). Periksa endpoint atau domain.' };
+        }
+
+        return JSON.parse(textResponse);
     } catch (error) {
         console.error('Topupku API Error:', error);
         return { status: false, msg: error.message };
@@ -30,11 +39,11 @@ async function topupRequest(endpoint, payload, headers = {}) {
 bot.start((ctx) => {
     return ctx.reply(
         `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
-        `Silakan pilih menu transaksi atau buat tagihan pembayaran instan (Snap Deposit) melalui tombol di bawah:`,
+        `Silakan pilih menu transaksi atau buat deposit/tagihan pembayaran melalui tombol di bawah:`,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
+                [Markup.button.callback('💳 Buat Deposit / Tagihan', 'menu_channels')],
                 [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
             ])
         }
@@ -45,14 +54,14 @@ bot.start((ctx) => {
 bot.action('menu_channels', async (ctx) => {
     await ctx.editMessageText(
         `📌 *PILIH KANAL PEMBAYARAN*\n\n` +
-        `Silakan pilih kategori metode pembayaran yang diinginkan oleh pelanggan:`,
+        `Silakan pilih kategori metode pembayaran yang diinginkan:`,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
                 [Markup.button.callback('📱 QRIS (SP / NQ)', 'pay_qris')],
-                [Markup.button.callback('👛 E-Wallet (DANA/OVO/Gopay)', 'pay_ewallet')],
-                [Markup.button.callback('🏦 Transfer Bank (BCA/BRI/Mandiri)', 'pay_bank')],
-                [Markup.button.callback('🏪 Ritel (Indomaret / Alfamart)', 'pay_retail')],
+                [Markup.button.callback('👛 E-Wallet (DA/OV/GOPAY)', 'pay_ewallet')],
+                [Markup.button.callback('🏦 Transfer Bank (BCA/BRI/Mandiri/CIMB)', 'pay_bank')],
+                [Markup.button.callback('🏪 Ritel (Indomaret / FT)', 'pay_retail')],
                 [Markup.button.callback('« Menu Utama', 'back_home')]
             ])
         }
@@ -63,8 +72,8 @@ bot.action('menu_channels', async (ctx) => {
 bot.action('pay_qris', async (ctx) => {
     await ctx.editMessageText(
         `📌 *PILIH KODE QRIS*\n\n` +
-        `• SP = QRIS Utama\n` +
-        `• NQ = QRIS Alternatif`,
+        `• SP = qris\n` +
+        `• NQ = qris2`,
         Markup.inlineKeyboard([
             [Markup.button.callback('Pilih SP (QRIS)', 'create_dep_SP')],
             [Markup.button.callback('Pilih NQ (QRIS 2)', 'create_dep_NQ')],
@@ -77,12 +86,12 @@ bot.action('pay_qris', async (ctx) => {
 bot.action('pay_ewallet', async (ctx) => {
     await ctx.editMessageText(
         `📌 *PILIH E-WALLET*\n\n` +
-        `• DA = DANA | OV = OVO\n` +
-        `• LA = LinkAja | SA/SHOPEEPAY = ShopeePay\n` +
-        `• GOPAY = GoPay | ASTRAPAY = AstraPay`,
+        `• DA = dana | OV = ovo\n` +
+        `• LA = linkaja | SA = shopeepay\n` +
+        `• GOPAY = gopay | ASTRAPAY = astrapay`,
         Markup.inlineKeyboard([
             [Markup.button.callback('DANA (DA)', 'create_dep_DA'), Markup.button.callback('OVO (OV)', 'create_dep_OV')],
-            [Markup.button.callback('ShopeePay (SA)', 'create_dep_SA'), Markup.button.callback('GoPay (GOPAY)', 'create_dep_GOPAY')],
+            [Markup.button.callback('GoPay (GOPAY)', 'create_dep_GOPAY'), Markup.button.callback('ShopeePay (SA)', 'create_dep_SA')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
@@ -92,8 +101,8 @@ bot.action('pay_ewallet', async (ctx) => {
 bot.action('pay_bank', async (ctx) => {
     await ctx.editMessageText(
         `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n` +
-        `• BCAVA = BCA | M2 = Mandiri\n` +
-        `• BR = BRI | I1 = BNI | B1 = CIMB Niaga`,
+        `• BCAVA = bca | M2 = mandiri\n` +
+        `• BR = bri | I1 = bni | B1 = CIMB Niaga`,
         Markup.inlineKeyboard([
             [Markup.button.callback('BCA (BCAVA)', 'create_dep_BCAVA'), Markup.button.callback('Mandiri (M2)', 'create_dep_M2')],
             [Markup.button.callback('BRI (BR)', 'create_dep_BR'), Markup.button.callback('CIMB (B1)', 'create_dep_B1')],
@@ -107,31 +116,31 @@ bot.action('pay_retail', async (ctx) => {
     await ctx.editMessageText(
         `📌 *PILIH PEMBAYARAN RITEL*\n\n` +
         `• INDOMARET = Indomaret\n` +
-        `• FT = Pegadaian / Alfamart / Pos`,
+        `• FT = Pegadaian/ALFA/Pos`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('Indomaret', 'create_dep_INDOMARET'), Markup.button.callback('Alfamart/FT (FT)', 'create_dep_FT')],
+            [Markup.button.callback('Indomaret (INDOMARET)', 'create_dep_INDOMARET'), Markup.button.callback('Alfamart/Pos (FT)', 'create_dep_FT')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
 });
 
-// Aksi Eksekusi Pembuatan Deposit / Tagihan Berdasarkan Kode Bank yang Dipilih
+// Aksi Eksekusi Pembuatan Deposit Berdasarkan Kanal yang Dipilih (/api/deposit)
 bot.action(/^create_dep_(.+)$/, async (ctx) => {
     const kodeBank = ctx.match[1];
     const reffId = `INDOSAKU-${Date.now().toString().slice(-8)}`;
-    const nominal = 10000; // Contoh nominal default, bisa disesuaikan
+    const nominal = "10000"; // Nominal default transaksi (bisa disesuaikan)
 
-    await ctx.editMessageText(`⏳ Sedang membuat tautan pembayaran untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
+    await ctx.editMessageText(`⏳ Sedang memproses deposit untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
 
-    // Enkripsi Signature 2 lapis HMAC-SHA256
+    // Enkripsi Signature HMAC-SHA256
     const stringToSign = `${MERCHANT_ID}:${reffId}`;
     const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
-    // Request ke endpoint /api/deposit sesuai referensi cURL Postman
+    // Request ke endpoint /api/deposit sesuai dokumentasi Postman
     const response = await topupRequest('/api/deposit', {
         reff_id: reffId,
         kode_bank: kodeBank,
-        nominal: nominal.toString()
+        nominal: nominal
     }, {
         "Authorization": MERCHANT_ID,
         "X-Order-Signature": signature
@@ -142,7 +151,7 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
         const paymentUrl = data.payment_url || data.checkout_url || `https://topupku.com/pay/${reffId}`;
         
         await ctx.reply(
-            `✅ *TAGIHAN PEMBAYARAN BERHASIL DIBUAT*\n\n` +
+            `✅ *DEPOSIT BERHASIL DIBUAT*\n\n` +
             `🆔 Reff ID: \`${reffId}\`\n` +
             `🏦 Kanal: \`${kodeBank}\`\n` +
             `💰 Nominal: Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
@@ -158,7 +167,7 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
         );
     } else {
         await ctx.reply(
-            `❌ *Gagal Membuat Tagihan*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
+            `❌ *Gagal Membuat Deposit*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'menu_channels')]])
@@ -174,7 +183,7 @@ bot.action('back_home', async (ctx) => {
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
+                [Markup.button.callback('💳 Buat Deposit / Tagihan', 'menu_channels')],
                 [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
             ])
         }
