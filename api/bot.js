@@ -8,7 +8,7 @@ const MERCHANT_ID = process.env.TOPUP_MERCHANT_ID || "MID9B4963992206";
 const API_KEY = process.env.TOPUP_API_KEY || "79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec";
 
 const INDOSAKU_LOGO_URL = 'https://ibb.co.com/1G94Bcm9';
-const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || '8559448151'; // Ganti ID Telegram admin Anda jika perlu
+const ADMIN_TELEGRAM_ID = '8559448151'; 
 
 const userSession = {};
 
@@ -32,31 +32,29 @@ const topupRequest = async (endpoint, payload = {}, extraHeaders = {}) => {
     }
 };
 
-// Menu Utama Bot (Disesuaikan berdasarkan hak akses Admin / User)
+// Menu Utama Bot (Tombol Cek Saldo Khusus Admin)
 const showMainMenu = async (ctx) => {
     const userId = ctx.from.id.toString();
     const isAdmin = (userId === ADMIN_TELEGRAM_ID.toString());
     const userName = ctx.from.first_name || 'Sobat INDOSAKU';
     
-    let text = 
+    const text = 
         `⚡ *INDOSAKU DIGITAL & PPOB* ⚡\n` +
         `━━━━━━━━━━━━━━━━━━━\n` +
         `Halo *${userName}*! Terhubung ke Server Topupku.com.\n\n` +
         `💡 *Silakan pilih menu di bawah ini:*`;
 
-    // Tombol dasar untuk semua user
     let keyboardRows = [
         [
-            Markup.button.callback('📱 Pulsa & Data', 'cat_Pulsa'),
-            Markup.button.callback('💳 TopUp E-Wallet', 'cat_E-Wallet')
+            Markup.button.callback('📱 Pulsa & Data', 'cat_all'),
+            Markup.button.callback('💳 TopUp E-Wallet', 'cat_all')
         ],
         [
-            Markup.button.callback('🎮 Voucher Game', 'cat_Game'),
+            Markup.button.callback('🎮 Voucher Game', 'cat_all'),
             Markup.button.callback('💬 Live Chat dengan Admin', 'start_live_chat')
         ]
     ];
 
-    // Jika yang buka adalah Admin, tambahkan tombol khusus Cek Saldo
     if (isAdmin) {
         keyboardRows.push([
             Markup.button.callback('💰 [ADMIN] Cek Saldo Merchant', 'check_balance')
@@ -79,10 +77,10 @@ bot.start(async (ctx) => {
 
 bot.action('back_home', async (ctx) => {
     delete userSession[ctx.from.id];
-    return await showMainMenu(ctx);
+    return await ctx.reply('🏠 *MENU UTAMA INDOSAKU*\nSilakan kirim /start untuk menampilkan panel utama.', { parse_mode: 'Markdown' });
 });
 
-// Cek Saldo / Profil Merchant (Hanya untuk Admin)
+// Cek Saldo / Profil Merchant (Khusus Admin)
 bot.action('check_balance', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (userId !== ADMIN_TELEGRAM_ID.toString()) {
@@ -121,15 +119,14 @@ bot.action('start_live_chat', async (ctx) => {
     );
 });
 
-// Pilih Kategori Layanan
+// Ambil Semua Katalog Produk dari Topupku API
 bot.action(/cat_(.+)/, async (ctx) => {
-    const categoryName = ctx.match[1];
     const userId = ctx.from.id;
-    userSession[userId] = { category: categoryName };
+    userSession[userId] = { category: 'all' };
 
-    await ctx.reply(`⏳ Mengambil daftar produk ${categoryName} dari Topupku...`);
+    await ctx.reply(`⏳ Mengambil daftar produk dari server Topupku...`);
 
-    const res = await topupRequest('/api/service', { filter_value: categoryName });
+    const res = await topupRequest('/api/service', {});
 
     if (res && res.data && res.data.length > 0) {
         userSession[userId].products = res.data;
@@ -140,14 +137,14 @@ bot.action(/cat_(.+)/, async (ctx) => {
         buttons.push([Markup.button.callback('« Batalkan & Kembali', 'back_home')]);
 
         return await ctx.reply(
-            `📦 *KATALOG PRODUK: ${categoryName.toUpperCase()}*\n` +
+            `📦 *KATALOG PRODUK TERSEDIA*\n` +
             `━━━━━━━━━━━━━━━━━━━\n` +
             `Silakan pilih produk yang ingin dibeli:`,
             { parse_mode: 'Markdown', ...Markup.inlineKeyboard(buttons) }
         );
     }
 
-    return await ctx.reply(`⚠️ Tidak ada produk ditemukan untuk kategori ini.`);
+    return await ctx.reply(`⚠️ Tidak ada produk ditemukan. Pastikan status akun API Anda sudah aktif.`);
 });
 
 // Pilih Produk -> Minta Target ID
@@ -177,7 +174,6 @@ bot.on('text', async (ctx) => {
 
     const userId = ctx.from.id.toString();
 
-    // Live Chat Handler untuk Admin
     if (userId === ADMIN_TELEGRAM_ID.toString() && ctx.message.reply_to_message) {
         const repliedText = ctx.message.reply_to_message.text || '';
         const matchId = repliedText.match(/ID User:\s*`(\d+)`/) || repliedText.match(/Dari:\s*`(\d+)`/);
