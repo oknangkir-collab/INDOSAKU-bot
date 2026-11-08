@@ -6,26 +6,28 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Konfigurasi Kredensial Topupku
 const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
 const API_KEY = process.env.API_KEY || 'ISI_API_KEY_ANDA';
-const TOPUPKU_URL = process.env.TOPUPKU_DOMAIN || 'https://api.topupku.com';
+const TOPUPKU_URL = 'https://topupku.com';
+const LICENSE_CODE = 'LIC-Z3V8-2UNT-HAWQ-CTOT';
 
-// Fungsi helper aman untuk request ke Topupku API (Anti HTML / JSON Parse Error)
-async function topupRequest(endpoint, payload, headers = {}) {
+// Fungsi helper untuk melakukan request API secara aman (Anti HTML Error / Cloudflare)
+async function topupRequest(endpoint, payload, customHeaders = {}) {
     try {
         const response = await fetch(`${TOPUPKU_URL}${endpoint}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...headers
+                'X-License-Code': LICENSE_CODE,
+                ...customHeaders
             },
             body: JSON.stringify(payload)
         });
 
         const textResponse = await response.text();
         
-        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare)
+        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare Block)
         if (textResponse.trim().startsWith('<') || textResponse.includes('<!DOCTYPE')) {
             console.error('HTML Error Response:', textResponse);
-            return { status: false, msg: 'Server Topupku mengembalikan halaman error (HTML). Periksa endpoint atau domain.' };
+            return { status: false, msg: 'Server Topupku mengembalikan halaman error (HTML). Periksa endpoint API.' };
         }
 
         return JSON.parse(textResponse);
@@ -39,7 +41,7 @@ async function topupRequest(endpoint, payload, headers = {}) {
 bot.start((ctx) => {
     return ctx.reply(
         `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
-        `Silakan pilih menu transaksi atau buat tautan pembayaran instan melalui tombol di bawah:`,
+        `Silakan pilih menu transaksi atau buat tagihan pembayaran melalui tombol di bawah:`,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
@@ -124,7 +126,7 @@ bot.action('pay_retail', async (ctx) => {
     );
 });
 
-// Aksi Eksekusi Pembuatan Tagihan ke Endpoint /api/deposit-snap
+// Aksi Eksekusi Pembuatan Tagihan Deposit
 bot.action(/^create_dep_(.+)$/, async (ctx) => {
     const kodeBank = ctx.match[1];
     const reffId = `ORDER-${Date.now().toString().slice(-8)}`;
@@ -132,17 +134,15 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
 
     await ctx.editMessageText(`⏳ Sedang membuat tautan pembayaran untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
 
-    // Enkripsi Signature HMAC-SHA256 sesuai standar Topupku
+    // Enkripsi Signature HMAC-SHA256
     const stringToSign = `${MERCHANT_ID}:${reffId}`;
     const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
-    // Request ke endpoint /api/deposit-snap (sesuai referensi Postman)
-    const response = await topupRequest('/api/deposit-snap', {
+    // Request ke endpoint /api/deposit
+    const response = await topupRequest('/api/deposit', {
         reff_id: reffId,
         kode_bank: kodeBank,
-        nominal: nominal,
-        product: "PPOB Indosaku",
-        note: `Pembayaran via ${kodeBank}`
+        nominal: nominal.toString()
     }, {
         "Authorization": MERCHANT_ID,
         "X-Order-Signature": signature
@@ -206,7 +206,7 @@ bot.action('check_profile', async (ctx) => {
     if (res && res.status) {
         await ctx.editMessageText(
             `✅ *STATUS AKUN AKTIF*\n\n` +
-            `👤 Nama: ${res.data?.name || 'Merchant INDOSAKU'}\n` +
+            `👤 Nama: ${res.data?.name || MERCHANT_ID}\n` +
             `💰 Saldo: Rp ${(res.data?.balance || 0).toLocaleString('id-ID')}\n`,
             {
                 parse_mode: 'Markdown',
