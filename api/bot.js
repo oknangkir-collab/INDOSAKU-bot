@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf, Markup, Scenes, session } = require('telegraf');
 const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -8,6 +8,9 @@ const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
 const API_KEY = '79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec';
 const TOPUPKU_URL = 'https://topupku.com';
 const LICENSE_CODE = 'LIC-Z3V8-2UNT-HAWQ-CTOT';
+
+// Mengaktifkan session sederhana untuk menyimpan data sementara pengguna
+const userState = {};
 
 // Fungsi helper aman untuk request ke Topupku API
 async function topupRequest(endpoint, payload, customHeaders = {}) {
@@ -25,7 +28,6 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
 
         const textResponse = await response.text();
         
-        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare)
         if (textResponse.trim().startsWith('<') || textResponse.includes('<!DOCTYPE')) {
             console.error('HTML Error Response:', textResponse);
             return { status: false, msg: 'Server Topupku mengembalikan halaman error (HTML). Periksa endpoint API.' };
@@ -40,6 +42,7 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
 
 // Handler Perintah /start
 bot.start((ctx) => {
+    delete userState[ctx.from.id];
     return ctx.reply(
         `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
         `Silakan pilih menu transaksi atau buat tagihan pembayaran melalui tombol di bawah:`,
@@ -53,8 +56,9 @@ bot.start((ctx) => {
     );
 });
 
-// Menu Pilihan Kanal Pembayaran Berdasarkan Referensi Postman
+// Menu Pilihan Kanal Pembayaran
 bot.action('menu_channels', async (ctx) => {
+    delete userState[ctx.from.id];
     await ctx.editMessageText(
         `📌 *PILIH KANAL PEMBAYARAN*\n\n` +
         `Silakan pilih kategori metode pembayaran yang diinginkan:`,
@@ -74,12 +78,10 @@ bot.action('menu_channels', async (ctx) => {
 // Sub-menu QRIS
 bot.action('pay_qris', async (ctx) => {
     await ctx.editMessageText(
-        `📌 *PILIH KODE QRIS*\n\n` +
-        `• SP = qris\n` +
-        `• NQ = qris2`,
+        `📌 *PILIH KODE QRIS*\n\n• SP = qris\n• NQ = qris2`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('Pilih SP (QRIS)', 'create_dep_SP')],
-            [Markup.button.callback('Pilih NQ (QRIS 2)', 'create_dep_NQ')],
+            [Markup.button.callback('Pilih SP (QRIS)', 'set_bank_SP')],
+            [Markup.button.callback('Pilih NQ (QRIS 2)', 'set_bank_NQ')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
@@ -88,13 +90,10 @@ bot.action('pay_qris', async (ctx) => {
 // Sub-menu E-Wallet
 bot.action('pay_ewallet', async (ctx) => {
     await ctx.editMessageText(
-        `📌 *PILIH E-WALLET*\n\n` +
-        `• DA = dana | OV = ovo\n` +
-        `• LA = linkaja | SA = shopeepay\n` +
-        `• GOPAY = gopay | ASTRAPAY = astrapay`,
+        `📌 *PILIH E-WALLET*\n\n• DA = dana | OV = ovo\n• GOPAY = gopay | SA = shopeepay`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('DANA (DA)', 'create_dep_DA'), Markup.button.callback('OVO (OV)', 'create_dep_OV')],
-            [Markup.button.callback('GoPay (GOPAY)', 'create_dep_GOPAY'), Markup.button.callback('ShopeePay (SA)', 'create_dep_SA')],
+            [Markup.button.callback('DANA (DA)', 'set_bank_DA'), Markup.button.callback('OVO (OV)', 'set_bank_OV')],
+            [Markup.button.callback('GoPay (GOPAY)', 'set_bank_GOPAY'), Markup.button.callback('ShopeePay (SA)', 'set_bank_SA')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
@@ -103,12 +102,10 @@ bot.action('pay_ewallet', async (ctx) => {
 // Sub-menu Bank
 bot.action('pay_bank', async (ctx) => {
     await ctx.editMessageText(
-        `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n` +
-        `• BCAVA = bca | M2 = mandiri\n` +
-        `• BR = bri | I1 = bni | B1 = CIMB Niaga`,
+        `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n• BCAVA = bca | M2 = mandiri\n• BR = bri | B1 = CIMB Niaga`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('BCA (BCAVA)', 'create_dep_BCAVA'), Markup.button.callback('Mandiri (M2)', 'create_dep_M2')],
-            [Markup.button.callback('BRI (BR)', 'create_dep_BR'), Markup.button.callback('CIMB (B1)', 'create_dep_B1')],
+            [Markup.button.callback('BCA (BCAVA)', 'set_bank_BCAVA'), Markup.button.callback('Mandiri (M2)', 'set_bank_M2')],
+            [Markup.button.callback('BRI (BR)', 'set_bank_BR'), Markup.button.callback('CIMB (B1)', 'set_bank_B1')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
@@ -117,69 +114,116 @@ bot.action('pay_bank', async (ctx) => {
 // Sub-menu Retail
 bot.action('pay_retail', async (ctx) => {
     await ctx.editMessageText(
-        `📌 *PILIH PEMBAYARAN RITEL*\n\n` +
-        `• INDOMARET = Indomaret\n` +
-        `• FT = Pegadaian/ALFA/Pos`,
+        `📌 *PILIH PEMBAYARAN RITEL*\n\n• INDOMARET = Indomaret\n• FT = Pegadaian/ALFA/Pos`,
         Markup.inlineKeyboard([
-            [Markup.button.callback('Indomaret (INDOMARET)', 'create_dep_INDOMARET'), Markup.button.callback('Alfamart/Pos (FT)', 'create_dep_FT')],
+            [Markup.button.callback('Indomaret (INDOMARET)', 'set_bank_INDOMARET'), Markup.button.callback('Alfamart/Pos (FT)', 'set_bank_FT')],
             [Markup.button.callback('« Kembali', 'menu_channels')]
         ])
     );
 });
 
-// Aksi Eksekusi Pembuatan Tagihan Deposit
-bot.action(/^create_dep_(.+)$/, async (ctx) => {
+// Ketika User Memilih Kanal -> Minta Masukkan Nominal
+bot.action(/^set_bank_(.+)$/, async (ctx) => {
     const kodeBank = ctx.match[1];
-    const reffId = `ORDER-${Date.now().toString().slice(-8)}`;
-    const nominal = 10000; // Nominal default transaksi (bisa disesuaikan)
+    userState[ctx.from.id] = { step: 'WAITING_NOMINAL', kode_bank: kodeBank };
 
-    await ctx.editMessageText(`⏳ Sedang membuat tautan pembayaran untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
+    await ctx.editMessageText(
+        `🏦 Kanal Dipilih: \`${kodeBank}\`\n\n` +
+        `💰 *SILAKAN KETIK NOMINAL PEMBAYARAN*\n` +
+        `(Contoh: \`50000\` atau \`150000\`)`,
+        {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([[Markup.button.callback('« Batal / Menu Utama', 'back_home')]])
+        }
+    );
+});
 
-    // Enkripsi Signature HMAC-SHA256
-    const stringToSign = `${MERCHANT_ID}:${reffId}`;
-    const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
+// Mendengarkan Pesan Teks dari Pengguna (Untuk Nominal & Keterangan)
+bot.on('text', async (ctx) => {
+    const userId = ctx.from.id;
+    const state = userState[userId];
 
-    // Request ke endpoint /api/deposit
-    const response = await topupRequest('/api/deposit', {
-        reff_id: reffId,
-        kode_bank: kodeBank,
-        nominal: nominal.toString()
-    }, {
-        "X-Order-Signature": signature
-    });
+    if (!state) return; // Jika tidak sedang dalam sesi input, abaikan
 
-    if (response && response.status) {
-        const data = response.data || {};
-        const paymentUrl = data.payment_url || data.checkout_url || `https://topupku.com/pay/${reffId}`;
-        
-        await ctx.reply(
-            `✅ *TAGIHAN PEMBAYARAN BERHASIL DIBUAT*\n\n` +
-            `🆔 Reff ID: \`${reffId}\`\n` +
-            `🏦 Kanal: \`${kodeBank}\`\n` +
-            `💰 Nominal: Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
-            `📊 Status: *Unpaid*\n\n` +
-            `Silakan klik tombol di bawah untuk menyelesaikan pembayaran:`,
-            {
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                    [Markup.button.url('🌐 Buka Link Pembayaran', paymentUrl)],
-                    [Markup.button.callback('« Menu Utama', 'back_home')]
-                ])
-            }
+    if (state.step === 'WAITING_NOMINAL') {
+        const nominalInput = ctx.message.text.trim().replace(/[^0-9]/g, '');
+        const nominal = parseInt(nominalInput);
+
+        if (isNaN(nominal) || nominal <= 0) {
+            return ctx.reply('❌ Nominal tidak valid. Harap masukkan angka saja (Contoh: 25000):');
+        }
+
+        state.nominal = nominal;
+        state.step = 'WAITING_NOTE';
+
+        return ctx.reply(
+            `📝 *MASUKKAN KETERANGAN / NAMA PRODUK*\n` +
+            `(Contoh: \`Topup Saldo / Bayar Pulsa\`)`,
+            { parse_mode: 'Markdown' }
         );
-    } else {
-        await ctx.reply(
-            `❌ *Gagal Membuat Tagihan*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
-            {
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'menu_channels')]])
-            }
-        );
+    }
+
+    if (state.step === 'WAITING_NOTE') {
+        const note = ctx.message.text.trim();
+        const kodeBank = state.kode_bank;
+        const nominal = state.nominal;
+
+        delete userState[userId]; // Reset sesi
+
+        const processingMsg = await ctx.reply(`⏳ Sedang memproses pembuatan tagihan sebesar Rp ${nominal.toLocaleString('id-ID')}...`);
+
+        const reffId = `ORDER-${Date.now().toString().slice(-8)}`;
+        const stringToSign = `${MERCHANT_ID}:${reffId}`;
+        const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
+
+        // Request ke endpoint /api/deposit dengan nominal & catatan dinamis
+        const response = await topupRequest('/api/deposit', {
+            reff_id: reffId,
+            kode_bank: kodeBank,
+            nominal: nominal.toString(),
+            note: note
+        }, {
+            "X-Order-Signature": signature
+        });
+
+        // Hapus pesan loading
+        try { await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id); } catch (e) {}
+
+        if (response && response.status) {
+            const data = response.data || {};
+            const paymentUrl = data.payment_url || data.checkout_url || `https://topupku.com/pay/${reffId}`;
+            
+            await ctx.reply(
+                `✅ *TAGIHAN PEMBAYARAN BERHASIL DIBUAT*\n\n` +
+                `🆔 Reff ID: \`${reffId}\`\n` +
+                `📌 Keterangan: *${note}*\n` +
+                `🏦 Kanal: \`${kodeBank}\`\n` +
+                `💰 Nominal: Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
+                `📊 Status: *Unpaid*\n\n` +
+                `Silakan klik tombol di bawah untuk menyelesaikan pembayaran:`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([
+                        [Markup.button.url('🌐 Buka Link Pembayaran', paymentUrl)],
+                        [Markup.button.callback('« Menu Utama', 'back_home')]
+                    ])
+                }
+            );
+        } else {
+            await ctx.reply(
+                `❌ *Gagal Membuat Tagihan*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'menu_channels')]])
+                }
+            );
+        }
     }
 });
 
 // Tombol Kembali ke Menu Utama
 bot.action('back_home', async (ctx) => {
+    delete userState[ctx.from.id];
     return ctx.editMessageText(
         `🤖 *PPOB INDOSAKU - MENU UTAMA*\n\nSilakan pilih menu transaksi di bawah:`,
         {
@@ -194,6 +238,7 @@ bot.action('back_home', async (ctx) => {
 
 // Cek Profil / Status Akun
 bot.action('check_profile', async (ctx) => {
+    delete userState[ctx.from.id];
     const reffId = `CHECK-${Date.now()}`;
     const stringToSign = `${MERCHANT_ID}:${reffId}`;
     const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
