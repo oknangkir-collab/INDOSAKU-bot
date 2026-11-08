@@ -8,7 +8,7 @@ const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
 const API_KEY = process.env.API_KEY || 'ISI_API_KEY_ANDA';
 const TOPUPKU_URL = process.env.TOPUPKU_DOMAIN || 'https://api.topupku.com';
 
-// Fungsi helper aman untuk request ke Topupku API (Anti HTML/JSON Parse Error)
+// Fungsi helper aman untuk request ke Topupku API (Anti HTML / JSON Parse Error)
 async function topupRequest(endpoint, payload, headers = {}) {
     try {
         const response = await fetch(`${TOPUPKU_URL}${endpoint}`, {
@@ -39,11 +39,11 @@ async function topupRequest(endpoint, payload, headers = {}) {
 bot.start((ctx) => {
     return ctx.reply(
         `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
-        `Silakan pilih menu transaksi atau buat deposit/tagihan pembayaran melalui tombol di bawah:`,
+        `Silakan pilih menu transaksi atau buat tautan pembayaran instan melalui tombol di bawah:`,
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 Buat Deposit / Tagihan', 'menu_channels')],
+                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
                 [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
             ])
         }
@@ -124,23 +124,25 @@ bot.action('pay_retail', async (ctx) => {
     );
 });
 
-// Aksi Eksekusi Pembuatan Deposit Berdasarkan Kanal yang Dipilih (/api/deposit)
+// Aksi Eksekusi Pembuatan Tagihan ke Endpoint /api/deposit-snap
 bot.action(/^create_dep_(.+)$/, async (ctx) => {
     const kodeBank = ctx.match[1];
-    const reffId = `INDOSAKU-${Date.now().toString().slice(-8)}`;
-    const nominal = "10000"; // Nominal default transaksi (bisa disesuaikan)
+    const reffId = `ORDER-${Date.now().toString().slice(-8)}`;
+    const nominal = 10000; // Nominal default transaksi (bisa disesuaikan)
 
-    await ctx.editMessageText(`⏳ Sedang memproses deposit untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
+    await ctx.editMessageText(`⏳ Sedang membuat tautan pembayaran untuk kanal *${kodeBank}*...`, { parse_mode: 'Markdown' });
 
-    // Enkripsi Signature HMAC-SHA256
+    // Enkripsi Signature HMAC-SHA256 sesuai standar Topupku
     const stringToSign = `${MERCHANT_ID}:${reffId}`;
     const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
-    // Request ke endpoint /api/deposit sesuai dokumentasi Postman
-    const response = await topupRequest('/api/deposit', {
+    // Request ke endpoint /api/deposit-snap (sesuai referensi Postman)
+    const response = await topupRequest('/api/deposit-snap', {
         reff_id: reffId,
         kode_bank: kodeBank,
-        nominal: nominal
+        nominal: nominal,
+        product: "PPOB Indosaku",
+        note: `Pembayaran via ${kodeBank}`
     }, {
         "Authorization": MERCHANT_ID,
         "X-Order-Signature": signature
@@ -151,7 +153,7 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
         const paymentUrl = data.payment_url || data.checkout_url || `https://topupku.com/pay/${reffId}`;
         
         await ctx.reply(
-            `✅ *DEPOSIT BERHASIL DIBUAT*\n\n` +
+            `✅ *TAGIHAN PEMBAYARAN BERHASIL DIBUAT*\n\n` +
             `🆔 Reff ID: \`${reffId}\`\n` +
             `🏦 Kanal: \`${kodeBank}\`\n` +
             `💰 Nominal: Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
@@ -167,7 +169,7 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
         );
     } else {
         await ctx.reply(
-            `❌ *Gagal Membuat Deposit*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
+            `❌ *Gagal Membuat Tagihan*\n\nPesan: ${response.msg || 'Terjadi kesalahan pada server.'}`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([[Markup.button.callback('« Kembali', 'menu_channels')]])
@@ -183,7 +185,7 @@ bot.action('back_home', async (ctx) => {
         {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-                [Markup.button.callback('💳 Buat Deposit / Tagihan', 'menu_channels')],
+                [Markup.button.callback('💳 Buat Tagihan / Deposit', 'menu_channels')],
                 [Markup.button.callback('ℹ️ Cek Status Akun', 'check_profile')]
             ])
         }
