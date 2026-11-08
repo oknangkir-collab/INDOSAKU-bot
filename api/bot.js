@@ -3,13 +3,13 @@ const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Konfigurasi Kredensial Topupku
+// Konfigurasi Kredensial & Lisensi Topupku
 const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
-const API_KEY = process.env.API_KEY || 'ISI_API_KEY_ANDA';
+const API_KEY = '79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec';
 const TOPUPKU_URL = 'https://topupku.com';
 const LICENSE_CODE = 'LIC-Z3V8-2UNT-HAWQ-CTOT';
 
-// Fungsi helper untuk melakukan request API secara aman (Anti HTML Error / Cloudflare)
+// Fungsi helper aman untuk request ke Topupku API
 async function topupRequest(endpoint, payload, customHeaders = {}) {
     try {
         const response = await fetch(`${TOPUPKU_URL}${endpoint}`, {
@@ -17,6 +17,7 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
             headers: {
                 'Content-Type': 'application/json',
                 'X-License-Code': LICENSE_CODE,
+                'Authorization': `Bearer ${API_KEY}`,
                 ...customHeaders
             },
             body: JSON.stringify(payload)
@@ -24,7 +25,7 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
 
         const textResponse = await response.text();
         
-        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare Block)
+        // Deteksi jika server mengembalikan halaman HTML (Error 404/500/Cloudflare)
         if (textResponse.trim().startsWith('<') || textResponse.includes('<!DOCTYPE')) {
             console.error('HTML Error Response:', textResponse);
             return { status: false, msg: 'Server Topupku mengembalikan halaman error (HTML). Periksa endpoint API.' };
@@ -144,7 +145,6 @@ bot.action(/^create_dep_(.+)$/, async (ctx) => {
         kode_bank: kodeBank,
         nominal: nominal.toString()
     }, {
-        "Authorization": MERCHANT_ID,
         "X-Order-Signature": signature
     });
 
@@ -199,7 +199,6 @@ bot.action('check_profile', async (ctx) => {
     const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
     const res = await topupRequest('/api/profile', { reff_id: reffId }, {
-        "Authorization": MERCHANT_ID,
         "X-Order-Signature": signature
     });
 
