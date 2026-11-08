@@ -1,16 +1,24 @@
-const { Telegraf, Markup, Scenes, session } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const crypto = require('crypto');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Konfigurasi Kredensial & Lisensi Topupku
+// Konfigurasi Kredensial, Lisensi, & Admin ID
 const MERCHANT_ID = process.env.MERCHANT_ID || 'MID9B4963992206';
 const API_KEY = '79b07bea389c464c2b304725d01844af4e3a90bf09fbc74b76c230fe94d93aec';
 const TOPUPKU_URL = 'https://topupku.com';
 const LICENSE_CODE = 'LIC-Z3V8-2UNT-HAWQ-CTOT';
 
-// Mengaktifkan session sederhana untuk menyimpan data sementara pengguna
+// ID Telegram Admin yang diizinkan mengakses bot
+const ADMIN_IDS = ['8559448151'];
+
 const userState = {};
+
+// Fungsi helper pengecekan apakah user adalah admin
+function isAdmin(ctx) {
+    const userId = ctx.from?.id ? ctx.from.id.toString() : '';
+    return ADMIN_IDS.includes(userId);
+}
 
 // Fungsi helper aman untuk request ke Topupku API
 async function topupRequest(endpoint, payload, customHeaders = {}) {
@@ -40,11 +48,16 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
     }
 }
 
-// Handler Perintah /start
+// Handler Perintah /start (Hanya Admin yang bisa mengakses menu PPOB & Deposit)
 bot.start((ctx) => {
     delete userState[ctx.from.id];
+
+    if (!isAdmin(ctx)) {
+        return ctx.reply('⛔ *Akses Ditolak*\n\nBot ini bersifat privat dan khusus digunakan oleh Administrator.', { parse_mode: 'Markdown' });
+    }
+
     return ctx.reply(
-        `🤖 *SELAMAT DATANG DI PPOB INDOSAKU*\n\n` +
+        `🤖 *SELAMAT DATANG DI PPOB INDOSAKU (ADMIN)*\n\n` +
         `Silakan pilih menu transaksi atau buat tagihan pembayaran melalui tombol di bawah:`,
         {
             parse_mode: 'Markdown',
@@ -56,8 +69,10 @@ bot.start((ctx) => {
     );
 });
 
-// Menu Pilihan Kanal Pembayaran
+// Menu Pilihan Kanal Pembayaran (Proteksi Admin)
 bot.action('menu_channels', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak. Khusus Admin!', { show_alert: true });
+
     delete userState[ctx.from.id];
     await ctx.editMessageText(
         `📌 *PILIH KANAL PEMBAYARAN*\n\n` +
@@ -77,6 +92,7 @@ bot.action('menu_channels', async (ctx) => {
 
 // Sub-menu QRIS
 bot.action('pay_qris', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
     await ctx.editMessageText(
         `📌 *PILIH KODE QRIS*\n\n• SP = qris\n• NQ = qris2`,
         Markup.inlineKeyboard([
@@ -89,6 +105,7 @@ bot.action('pay_qris', async (ctx) => {
 
 // Sub-menu E-Wallet
 bot.action('pay_ewallet', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
     await ctx.editMessageText(
         `📌 *PILIH E-WALLET*\n\n• DA = dana | OV = ovo\n• GOPAY = gopay | SA = shopeepay`,
         Markup.inlineKeyboard([
@@ -101,6 +118,7 @@ bot.action('pay_ewallet', async (ctx) => {
 
 // Sub-menu Bank
 bot.action('pay_bank', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
     await ctx.editMessageText(
         `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n• BCAVA = bca | M2 = mandiri\n• BR = bri | B1 = CIMB Niaga`,
         Markup.inlineKeyboard([
@@ -113,6 +131,7 @@ bot.action('pay_bank', async (ctx) => {
 
 // Sub-menu Retail
 bot.action('pay_retail', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
     await ctx.editMessageText(
         `📌 *PILIH PEMBAYARAN RITEL*\n\n• INDOMARET = Indomaret\n• FT = Pegadaian/ALFA/Pos`,
         Markup.inlineKeyboard([
@@ -124,6 +143,8 @@ bot.action('pay_retail', async (ctx) => {
 
 // Ketika User Memilih Kanal -> Minta Masukkan Nominal
 bot.action(/^set_bank_(.+)$/, async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+
     const kodeBank = ctx.match[1];
     userState[ctx.from.id] = { step: 'WAITING_NOMINAL', kode_bank: kodeBank };
 
@@ -138,12 +159,14 @@ bot.action(/^set_bank_(.+)$/, async (ctx) => {
     );
 });
 
-// Mendengarkan Pesan Teks dari Pengguna (Untuk Nominal & Keterangan)
+// Mendengarkan Pesan Teks dari Admin (Untuk Nominal & Keterangan)
 bot.on('text', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+
     const userId = ctx.from.id;
     const state = userState[userId];
 
-    if (!state) return; // Jika tidak sedang dalam sesi input, abaikan
+    if (!state) return;
 
     if (state.step === 'WAITING_NOMINAL') {
         const nominalInput = ctx.message.text.trim().replace(/[^0-9]/g, '');
@@ -168,7 +191,7 @@ bot.on('text', async (ctx) => {
         const kodeBank = state.kode_bank;
         const nominal = state.nominal;
 
-        delete userState[userId]; // Reset sesi
+        delete userState[userId];
 
         const processingMsg = await ctx.reply(`⏳ Sedang memproses pembuatan tagihan sebesar Rp ${nominal.toLocaleString('id-ID')}...`);
 
@@ -176,7 +199,6 @@ bot.on('text', async (ctx) => {
         const stringToSign = `${MERCHANT_ID}:${reffId}`;
         const signature = crypto.createHmac('sha256', API_KEY).update(stringToSign).digest('hex');
 
-        // Request ke endpoint /api/deposit dengan nominal & catatan dinamis
         const response = await topupRequest('/api/deposit', {
             reff_id: reffId,
             kode_bank: kodeBank,
@@ -186,7 +208,6 @@ bot.on('text', async (ctx) => {
             "X-Order-Signature": signature
         });
 
-        // Hapus pesan loading
         try { await ctx.telegram.deleteMessage(ctx.chat.id, processingMsg.message_id); } catch (e) {}
 
         if (response && response.status) {
@@ -223,6 +244,8 @@ bot.on('text', async (ctx) => {
 
 // Tombol Kembali ke Menu Utama
 bot.action('back_home', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+
     delete userState[ctx.from.id];
     return ctx.editMessageText(
         `🤖 *PPOB INDOSAKU - MENU UTAMA*\n\nSilakan pilih menu transaksi di bawah:`,
@@ -238,6 +261,8 @@ bot.action('back_home', async (ctx) => {
 
 // Cek Profil / Status Akun
 bot.action('check_profile', async (ctx) => {
+    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+
     delete userState[ctx.from.id];
     const reffId = `CHECK-${Date.now()}`;
     const stringToSign = `${MERCHANT_ID}:${reffId}`;
