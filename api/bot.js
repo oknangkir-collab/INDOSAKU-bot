@@ -48,10 +48,11 @@ async function topupRequest(endpoint, payload, customHeaders = {}) {
     }
 }
 
-// Handler Perintah /start (Hanya Admin yang bisa mengakses menu PPOB & Deposit)
+// Handler Perintah /start
 bot.start((ctx) => {
     delete userState[ctx.from.id];
 
+    // Jika bukan admin, tampilkan peringatan penolakan
     if (!isAdmin(ctx)) {
         return ctx.reply('⛔ *Akses Ditolak*\n\nBot ini bersifat privat dan khusus digunakan oleh Administrator.', { parse_mode: 'Markdown' });
     }
@@ -69,9 +70,11 @@ bot.start((ctx) => {
     );
 });
 
-// Menu Pilihan Kanal Pembayaran (Proteksi Admin)
+// Menu Pilihan Kanal Pembayaran
 bot.action('menu_channels', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak. Khusus Admin!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nBot ini khusus untuk Administrator.', { show_alert: true });
+    }
 
     delete userState[ctx.from.id];
     await ctx.editMessageText(
@@ -92,7 +95,9 @@ bot.action('menu_channels', async (ctx) => {
 
 // Sub-menu QRIS
 bot.action('pay_qris', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nAnda tidak memiliki izin.', { show_alert: true });
+    }
     await ctx.editMessageText(
         `📌 *PILIH KODE QRIS*\n\n• SP = qris\n• NQ = qris2`,
         Markup.inlineKeyboard([
@@ -105,7 +110,9 @@ bot.action('pay_qris', async (ctx) => {
 
 // Sub-menu E-Wallet
 bot.action('pay_ewallet', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nAnda tidak memiliki izin.', { show_alert: true });
+    }
     await ctx.editMessageText(
         `📌 *PILIH E-WALLET*\n\n• DA = dana | OV = ovo\n• GOPAY = gopay | SA = shopeepay`,
         Markup.inlineKeyboard([
@@ -118,7 +125,9 @@ bot.action('pay_ewallet', async (ctx) => {
 
 // Sub-menu Bank
 bot.action('pay_bank', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nAnda tidak memiliki izin.', { show_alert: true });
+    }
     await ctx.editMessageText(
         `📌 *PILIH VIRTUAL ACCOUNT BANK*\n\n• BCAVA = bca | M2 = mandiri\n• BR = bri | B1 = CIMB Niaga`,
         Markup.inlineKeyboard([
@@ -131,7 +140,9 @@ bot.action('pay_bank', async (ctx) => {
 
 // Sub-menu Retail
 bot.action('pay_retail', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nAnda tidak memiliki izin.', { show_alert: true });
+    }
     await ctx.editMessageText(
         `📌 *PILIH PEMBAYARAN RITEL*\n\n• INDOMARET = Indomaret\n• FT = Pegadaian/ALFA/Pos`,
         Markup.inlineKeyboard([
@@ -141,9 +152,11 @@ bot.action('pay_retail', async (ctx) => {
     );
 });
 
-// Ketika User Memilih Kanal -> Minta Masukkan Nominal
+// Ketika Memilih Kanal -> Minta Masukkan Nominal
 bot.action(/^set_bank_(.+)$/, async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nAnda tidak memiliki izin.', { show_alert: true });
+    }
 
     const kodeBank = ctx.match[1];
     userState[ctx.from.id] = { step: 'WAITING_NOMINAL', kode_bank: kodeBank };
@@ -159,9 +172,9 @@ bot.action(/^set_bank_(.+)$/, async (ctx) => {
     );
 });
 
-// Mendengarkan Pesan Teks dari Admin (Untuk Nominal & Keterangan)
+// Mendengarkan Pesan Teks (Nominal & Keterangan)
 bot.on('text', async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    if (!isAdmin(ctx)) return; // Abaikan pesan dari non-admin
 
     const userId = ctx.from.id;
     const state = userState[userId];
@@ -244,7 +257,9 @@ bot.on('text', async (ctx) => {
 
 // Tombol Kembali ke Menu Utama
 bot.action('back_home', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!', { show_alert: true });
+    }
 
     delete userState[ctx.from.id];
     return ctx.editMessageText(
@@ -261,7 +276,9 @@ bot.action('back_home', async (ctx) => {
 
 // Cek Profil / Status Akun
 bot.action('check_profile', async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.answerCbQuery('⛔ Akses ditolak!', { show_alert: true });
+    if (!isAdmin(ctx)) {
+        return ctx.answerCbQuery('⛔ AKSES DITOLAK!\n\nFitur ini khusus untuk Admin.', { show_alert: true });
+    }
 
     delete userState[ctx.from.id];
     const reffId = `CHECK-${Date.now()}`;
